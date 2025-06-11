@@ -18,6 +18,7 @@ DEBUG_ENABLED = False
 
 #---# Program Constants #---#
 METADATA_FILE = "metadata.json"
+PEER_TIMEOUT = 60 #seconds
 #---------------------------#
 
 #---# Program Globals #---#
@@ -115,13 +116,24 @@ def msg_build_gossip_reply(host, port, peer_id, local_files):
 #-----------------------#
 def update_tracked_peer(host, port, peer_id):
     """
-    Update the tracked_peers dictionary with new info on a peer"""
+    Update the tracked_peers dictionary with new info on a peer
+    """
     tracked_peers[peer_id] = {
         "host": host,
         "port": port,
         "last_seen": time.time(),
     }
 # end update_tracked_peer()
+
+def remove_old_peers(timeout=PEER_TIMEOUT):
+    """
+    Removes peers from tracked peers that have not been heard from in timeout seconds
+    """
+    now = time.time()
+    for peer_id in list(tracked_peers.keys()):
+        if now - tracked_peers[peer_id]["last_seen"] > timeout:
+            del tracked_peers[peer_id]
+# end remove_old_peers()
 #-----------------------#
 # end of Peer Tracking  #
 #-----------------------#
