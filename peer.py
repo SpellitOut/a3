@@ -157,6 +157,11 @@ def interval_send_gossip(host, port, peer_id):
         debug("Trying to Gossip")
         time.sleep(GOSSIP_INTERVAL)
 # end interval_send_gossip
+
+def msg_send_gossip_reply(my_host, my_port, my_peer_id, my_local_files, to_host, to_port):
+    pass
+
+# end msg_send_gossip_reply()
 #-------------------------#
 # end of Message Sending  #
 #-------------------------#
@@ -264,14 +269,22 @@ def receive_message(client_socket):
     raise ConnectionError("Invalid JSON received before connection was closed.")
 # end receive_message()
 
-# def msg_handle_gossip(msg, peer_id, host, port):
-#     """
-#     Handles a GOSSIP message received by this peer.
-#     """
-#     the_host = msg["host"]
-#     the_port = msg["port"]
-#     gossip_id = msg["id"]
-#     the_peer_id = msg["peerId"]
+def receive_msg_gossip(msg, my_peer_id, my_host, my_port):
+    """
+    Handles a GOSSIP message received by this peer.
+    """
+    pass
+    the_host = msg["host"]
+    the_port = msg["port"]
+    gossip_id = msg["id"]
+    the_peer_id = msg["peerId"]
+
+    if gossip_id in seen_gossip_ids:
+        return # we have seen the gossip so do no more
+    
+    seen_gossip_ids.add(gossip_id) # new gossip to us, so add and process
+
+
 
 #     if gossip_id in seen_gossip_ids:
 #         return # we have already seen it so we do not need to process
@@ -286,22 +299,21 @@ def receive_message(client_socket):
 #     repeat_to_peers = [p for p in tracked_peers.values() if p["peerId"]]
 
 
-# # end msg_handle_gossip
+# end msg_handle_gossip
 
-def handle_message(msg, peer_id, host, port):
+def handle_message(msg, my_peer_id, my_host, my_port):
     """
     Takes in a msg message and parses the info to pass it off to the correct message type handler
     """
     type = msg["type"]
 
     if type == "GOSSIP":
-        #msg_handle_gossip(msg, peer_id, host, port)
+        receive_msg_gossip(msg, my_peer_id, my_host, my_port)
         debug("Handling GOSSIP")
     elif type == "GOSSIP_REPLY":
         debug("Handling GOSSIP_REPLY")
     else:
         print(f"Unhandled Message Type")
-
 # end handle_message()
 
 def handle_client(client_socket, addr, peer_id, host, port):
