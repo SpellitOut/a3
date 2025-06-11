@@ -3,6 +3,7 @@ import sys
 import json
 import time
 import uuid
+import random
 import socket
 import threading
 
@@ -19,6 +20,8 @@ DEBUG_ENABLED = False
 #---# Program Constants #---#
 METADATA_FILE = "metadata.json"
 PEER_TIMEOUT = 60 #seconds
+GOSSIP_INTERVAL = 30 #seconds -- How often peer gossips
+GOSSIP_PEER_COUNT = 3 # how many peers do we attempt to gossip to
 #---------------------------#
 
 #---# Program Globals #---#
@@ -73,6 +76,54 @@ def save_metadata(data):
 
 
 
+#-------------------------#
+#---# Message Sending #---#
+#                         #
+# code related to sending #
+# messages that will be   #
+# over the p2p server     #
+#-------------------------#
+# def send_message(msg, toHost, toPort):
+#     pass
+# # end send_message()
+
+# def msg_send_gossip(host, port, peer_id):
+#     """
+#     Send a gossip message to the peer's known peers.
+#     """
+#     gossip_message = msg_build_gossip(host, port, peer_id)
+#     seen_gossip_ids.add(gossip_message["id"])
+
+#     known_peers = list(tracked_peers.items())
+#     random.shuffle(known_peers)
+
+#     for k_peer_id, k_peer_info in known_peers[:GOSSIP_PEER_COUNT]:
+#         k_host = k_peer_info["host"]
+#         k_port = k_peer_info["port"]
+
+#         try:
+#             with socket.create_connection((k_host, k_port), timeout=5) as sock:
+#                 sock.sendall(json.dumps(gossip_message).encode())
+#         except Exception as e:
+#             print(f"Failed to send gossip to {k_peer_id} ({k_host}:{k_port}): {e}")
+# # end msg_send_gossip
+
+def interval_send_gossip(host, port, peer_id):
+    """
+    Send gossip from host, port, peer_id periodically, set by GOSSIP_INTERVAL
+    Runs on a thread to happen while other things run
+    """
+    while True:
+        #msg_send_gossip(host, port, peer_id)
+        debug("Trying to Gossip")
+        time.sleep(GOSSIP_INTERVAL)
+# end interval_send_gossip
+#-------------------------#
+# end of Message Sending  #
+#-------------------------#
+
+
+
 #--------------------------#
 #---# Message Building #---#
 #                          #
@@ -101,7 +152,6 @@ def msg_build_gossip_reply(host, port, peer_id, local_files):
         "files": local_files
     }
 # end msg_build_gossip_reply
-
 #--------------------------#
 # end of Message Building  #
 #--------------------------#
@@ -175,7 +225,47 @@ def receive_message(client_socket):
     raise ConnectionError("Invalid JSON received before connection was closed.")
 # end receive_message()
 
-def handle_client(client_socket, addr):
+# def msg_handle_gossip(msg, peer_id, host, port):
+#     """
+#     Handles a GOSSIP message received by this peer.
+#     """
+#     the_host = msg["host"]
+#     the_port = msg["port"]
+#     gossip_id = msg["id"]
+#     the_peer_id = msg["peerId"]
+
+#     if gossip_id in seen_gossip_ids:
+#         return # we have already seen it so we do not need to process
+    
+#     seen_gossip_ids.add(gossip_id) # new gossip id to us
+
+#     # send GOSSIP_REPLY to the sender
+#     gossip_reply = msg_build_gossip_reply(host, port, peer_id, []) # TODO - send actual file metadata instead of []
+#     send_message(gossip_reply, the_host, the_port)
+
+#     # Repeat GOSSIP to GOSSIP_PEER_COUNT random known peers
+#     repeat_to_peers = [p for p in tracked_peers.values() if p["peerId"]]
+
+
+# # end msg_handle_gossip
+
+def handle_message(msg, peer_id, host, port):
+    """
+    Takes in a msg message and parses the info to pass it off to the correct message type handler
+    """
+    type = msg["type"]
+
+    if type == "GOSSIP":
+        #msg_handle_gossip(msg, peer_id, host, port)
+        debug("Handling GOSSIP")
+    elif type == "GOSSIP_REPLY":
+        debug("Handling GOSSIP_REPLY")
+    else:
+        print(f"Unhandled Message Type")
+
+# end handle_message()
+
+def handle_client(client_socket, addr, peer_id, host, port):
     """
     Handles receiving messages from a client and passing off responsibility to the correct handlers
     """
@@ -184,9 +274,7 @@ def handle_client(client_socket, addr):
         msg = receive_message(client_socket)
         if msg:
             print(f"Received from {addr}: {msg}")
-            # TODO - Process the message here
-            # will pass off to a message processor, that will then call the appropriate handler
-
+            handle_message(msg, peer_id, host, port)
     except Exception as e:
         print(f"Exception while communicating with {addr}: {e}")
     finally:
@@ -221,7 +309,7 @@ def p2p_server(peer_id, host, port, http_port):
     while True:
         try:
             client_socket, addr = server_sock.accept()
-            threading.Thread(target=handle_client, args=(client_socket, addr), daemon=True).start()
+            threading.Thread(target=handle_client, args=(client_socket, addr, peer_id, host, port), daemon=True).start()
         except socket.timeout:
             continue # no connection, so we check again
         except Exception as e:
@@ -317,6 +405,9 @@ def main():
     server_thread.start()
 
     server_ready.wait() # wait on P2P server to start
+
+    gossip_thread = threading.Thread(target=interval_send_gossip, args=(host, p2p_port, peer_id), daemon=True)
+    gossip_thread.start()
 
     try:
         command_line()
