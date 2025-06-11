@@ -1,6 +1,8 @@
 import os
 import sys
 import json
+import time
+import uuid
 import socket
 import threading
 
@@ -19,6 +21,8 @@ METADATA_FILE = "metadata.json"
 #---------------------------#
 
 #---# Program Globals #---#
+tracked_peers = {} # key: peerId, value: dict with host, port, last_seen
+seen_gossip_ids = set() # uses a set to avoid repeats
 server_ready = threading.Event()
 #-------------------------#
 
@@ -68,6 +72,62 @@ def save_metadata(data):
 
 
 
+#--------------------------#
+#---# Message Building #---#
+#                          #
+# code related to building #
+# messages that will be    #
+# sent over the p2p server #
+#--------------------------#
+def msg_build_gossip(host, port, peer_id):
+    """Build a message for GOSSIP format"""
+    return {
+        "type": "GOSSIP",
+        "host": host,
+        "port": port,
+        "id": str(uuid.uuid4()),
+        "peerId": peer_id 
+    }
+# end msg_build_gossip()
+
+def msg_build_gossip_reply(host, port, peer_id, local_files):
+    """Build a message for GOSSIP_REPLY format"""
+    return {
+        "type": "GOSSIP_REPLY",
+        "host": host,
+        "port": port,
+        "peerId": peer_id,
+        "files": local_files
+    }
+# end msg_build_gossip_reply
+
+#--------------------------#
+# end of Message Building  #
+#--------------------------#
+
+
+
+#-----------------------#
+#---# Peer Tracking #---#
+#                       #
+# code related to       #
+# tracking peers        #
+#-----------------------#
+def update_tracked_peer(host, port, peer_id):
+    """
+    Update the tracked_peers dictionary with new info on a peer"""
+    tracked_peers[peer_id] = {
+        "host": host,
+        "port": port,
+        "last_seen": time.time(),
+    }
+# end update_tracked_peer()
+#-----------------------#
+# end of Peer Tracking  #
+#-----------------------#
+
+
+
 #---------------------------------#
 #---# Peer-to-Peer Management #---#
 #                                 #
@@ -75,6 +135,9 @@ def save_metadata(data):
 # the p2p server                  #
 #---------------------------------#
 def receive_message(client_socket):
+    """
+    Receive in a valid-formatted JSON message from client_socket
+    """
     buffer = b""
     decoder = json.JSONDecoder()
     while True:
@@ -90,7 +153,7 @@ def receive_message(client_socket):
         
         # Attempt to decode JSON from a buffer
         try:
-            msg = decoder.raw_decode(buffer.decode())
+            msg, _ = decoder.raw_decode(buffer.decode())
             return msg
         except json.JSONDecodeError:
             # keep reading
@@ -98,18 +161,26 @@ def receive_message(client_socket):
 
     # if connection has closed, but JSON is still invalid, throw an error
     raise ConnectionError("Invalid JSON received before connection was closed.")
+# end receive_message()
 
 def handle_client(client_socket, addr):
-    debug(f"Accepted connection from {addr}")
+    """
+    Handles receiving messages from a client and passing off responsibility to the correct handlers
+    """
+    print(f"Accepted connection from {addr}")
     try:
         msg = receive_message(client_socket)
         if msg:
             print(f"Received from {addr}: {msg}")
+            # TODO - Process the message here
+            # will pass off to a message processor, that will then call the appropriate handler
+
     except Exception as e:
         print(f"Exception while communicating with {addr}: {e}")
     finally:
         client_socket.close()
         print(f"Connection closed from {addr}")
+# end handle_client()
 
 def p2p_help_commands():
     """
@@ -121,6 +192,7 @@ def p2p_help_commands():
           "Use 'peers' to view connected peers\n" + 
           "Use 'exit' to quit"
           )
+# end p2p_help_commands()
 
 def p2p_server(peer_id, host, port, http_port):
     """
@@ -129,7 +201,7 @@ def p2p_server(peer_id, host, port, http_port):
     server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_sock.bind((host, port))
     server_sock.listen()
-    server_sock.settimeout(10) # seconds
+    server_sock.settimeout(1) # seconds
     print(f"Peer {peer_id} running on {host}:{port}, HTTP on {http_port}")
     p2p_help_commands()
     server_ready.set() # Server is ready
