@@ -100,33 +100,29 @@ def first_gossip(my_host, my_port, my_peer_id):
     msg_send_gossip(my_host, my_port, my_peer_id, KNOWN_HOST, KNOWN_PORT)
 # end first_gossip()
 
-def n_peer_gossip(n, my_host, my_port, my_peer_id):
+def n_peer_gossip(n, my_host, my_port, my_peer_id, msg_override=None):
     """
-    Send a gossip message to n tracked peers. If n < len(tracked_peers), the peers are randomly selected.
+    Send a message to n tracked peers. If n < len(tracked_peers), the peers are randomly selected.
 
     Parameters:
         n (int): the number of peers to send gossip message to.
         my_host: the host of sender
         my_port: the port of sender
         my_peer_id: the peer id of sender
+        msg_override: the msg to send. If None, create new gossip message
     """
     known_peers = list(tracked_peers.items())
     random.shuffle(known_peers)
 
-    # pick first n peers
-    # send gossip to those n peers
+    for peer_id, peer_info in known_peers[:n]:
+        if peer_id == my_peer_id:
+            continue # skip this peer
+        msg_send_gossip(my_host, my_port, my_peer_id, peer_info["host"], peer_info["port"], msg_override)
 
-    # for peer in known_peers[:n]
-    #   msg_send_gossip(my_host, my_port, my_peer_id, peer["host"], peer["port"])
-
-
-    # for k_peer_id, k_peer_info in known_peers[:GOSSIP_PEER_COUNT]:
-    #     k_host = k_peer_info["host"]
-    #     k_port = k_peer_info["port"]
 
 # end n_peer_gossip()
 
-def msg_send_gossip(my_host, my_port, my_peer_id, to_host, to_port):
+def msg_send_gossip(my_host, my_port, my_peer_id, to_host, to_port, msg_override=None):
     """
     Sends a gossip message.
 
@@ -137,10 +133,16 @@ def msg_send_gossip(my_host, my_port, my_peer_id, to_host, to_port):
 
         to_host : the host of receiver
         to_port : the port of receiver
+
+        msg_override: the msg to send. If None, create new gossip message
     """
     remove_old_peers() # make sure we only send to active peers
 
-    gossip_message = msg_build_gossip(my_host, my_port, my_peer_id)
+    if msg_override is None:
+        gossip_message = msg_build_gossip(my_host, my_port, my_peer_id)
+    else:
+        gossip_message = msg_override
+
     seen_gossip_ids.add(gossip_message["id"])
 
     try:
@@ -150,14 +152,14 @@ def msg_send_gossip(my_host, my_port, my_peer_id, to_host, to_port):
         print(f"Failed to send gossip to {to_host}:{to_port}: {e}")
 # end msg_send_gossip
 
-def interval_send_gossip(host, port, peer_id):
+def interval_send_gossip(my_host, my_port, my_peer_id):
     """
     Send gossip from host, port, peer_id periodically, to all this peers known peers.
     Runs on a thread to happen while other things run
     """
     while True:
-        #msg_send_gossip(host, port, peer_id)
-        debug("Trying to Gossip")
+        n_peer_gossip(len(tracked_peers), my_host, my_port, my_peer_id)
+        print(f"Sent gossip message to {len(tracked_peers)} peers")
         time.sleep(GOSSIP_INTERVAL)
 # end interval_send_gossip
 
@@ -253,6 +255,7 @@ def remove_old_peers(timeout=PEER_TIMEOUT):
     now = time.time()
     for peer_id in list(tracked_peers.keys()):
         if now - tracked_peers[peer_id]["last_seen"] > timeout:
+            debug(f"Removing old peer {peer_id}")
             del tracked_peers[peer_id]
 # end remove_old_peers()
 #-----------------------#
@@ -313,8 +316,8 @@ def receive_msg_gossip(msg, my_peer_id, my_host, my_port):
 
     msg_send_gossip_reply(my_host, my_port, my_peer_id, the_host, the_port)
 
-    # Repeat GOSSIP to GOSSIP_PEER_COUNT random known peers
-    # repeat_to_peers = [p for p in tracked_peers.values() if p["peerId"]]
+    # Forward the message to some of my known peers
+    n_peer_gossip(GOSSIP_PEER_COUNT, my_host, my_port, my_peer_id, msg)
 # end receive_msg_gossip
 
 def receive_msg_gossip_reply(msg, my_peer_id, my_host, my_port):
