@@ -7,7 +7,12 @@ import random
 import socket
 import threading
 
-
+#---# WELL KNOWN HOST INFORMATION #---#
+# You may adjust these values to      #
+# match a well-known-host of your own #
+KNOWN_HOST = "localhost"
+KNOWN_PORT = "8270"
+#-------------------------------------#
 
 #---# Program Defaults #---#
 DEFAULT_HOST = "localhost"
@@ -87,30 +92,64 @@ def save_metadata(data):
 #     pass
 # # end send_message()
 
-# def msg_send_gossip(host, port, peer_id):
-#     """
-#     Send a gossip message to the peer's known peers.
-#     """
-#     gossip_message = msg_build_gossip(host, port, peer_id)
-#     seen_gossip_ids.add(gossip_message["id"])
+def first_gossip(my_host, my_port, my_peer_id):
+    """
+    Send a first gossip message to a known host to let them know this peer exists
+    """
+    msg_send_gossip(my_host, my_port, my_peer_id, KNOWN_HOST, KNOWN_PORT)
+# end first_gossip()
 
-#     known_peers = list(tracked_peers.items())
-#     random.shuffle(known_peers)
+def n_peer_gossip(n, my_host, my_port, my_peer_id):
+    """
+    Send a gossip message to n tracked peers. If n < len(tracked_peers), the peers are randomly selected.
 
-#     for k_peer_id, k_peer_info in known_peers[:GOSSIP_PEER_COUNT]:
-#         k_host = k_peer_info["host"]
-#         k_port = k_peer_info["port"]
+    Parameters:
+        n (int): the number of peers to send gossip message to.
+        my_host: the host of sender
+        my_port: the port of sender
+        my_peer_id: the peer id of sender
+    """
+    known_peers = list(tracked_peers.items())
+    random.shuffle(known_peers)
 
-#         try:
-#             with socket.create_connection((k_host, k_port), timeout=5) as sock:
-#                 sock.sendall(json.dumps(gossip_message).encode())
-#         except Exception as e:
-#             print(f"Failed to send gossip to {k_peer_id} ({k_host}:{k_port}): {e}")
-# # end msg_send_gossip
+    # pick first n peers
+    # send gossip to those n peers
+
+    # for peer in known_peers[:n]
+    #   msg_send_gossip(my_host, my_port, my_peer_id, peer["host"], peer["port"])
+
+
+    # for k_peer_id, k_peer_info in known_peers[:GOSSIP_PEER_COUNT]:
+    #     k_host = k_peer_info["host"]
+    #     k_port = k_peer_info["port"]
+
+# end n_peer_gossip()
+
+def msg_send_gossip(my_host, my_port, my_peer_id, to_host, to_port):
+    """
+    Sends a gossip message.
+
+    Parameters:
+        my_host : the host of sender
+        my_port : the port of sender
+        my_peer_id : the peer id of the sender
+
+        to_host : the host of receiver
+        to_port : the port of receiver
+    """
+    gossip_message = msg_build_gossip(my_host, my_port, my_peer_id)
+    seen_gossip_ids.add(gossip_message["id"])
+
+    try:
+        with socket.create_connection((to_host, to_port), timeout=5) as sock:
+            sock.sendall(json.dumps(gossip_message).encode())
+    except Exception as e:
+        print(f"Failed to send gossip to {to_host}:{to_port}: {e}")
+# end msg_send_gossip
 
 def interval_send_gossip(host, port, peer_id):
     """
-    Send gossip from host, port, peer_id periodically, set by GOSSIP_INTERVAL
+    Send gossip from host, port, peer_id periodically, to all this peers known peers.
     Runs on a thread to happen while other things run
     """
     while True:
@@ -269,9 +308,12 @@ def handle_client(client_socket, addr, peer_id, host, port):
     """
     Handles receiving messages from a client and passing off responsibility to the correct handlers
     """
-    print(f"Accepted connection from {addr}")
+    debug(f"Accepted connection from {addr}")
     try:
         msg = receive_message(client_socket)
+        if msg.get("peerId") == peer_id:
+            debug(f"Received connection my myself. Ignoring.")
+            return # ignore because it's my own message
         if msg:
             print(f"Received from {addr}: {msg}")
             handle_message(msg, peer_id, host, port)
@@ -279,7 +321,7 @@ def handle_client(client_socket, addr, peer_id, host, port):
         print(f"Exception while communicating with {addr}: {e}")
     finally:
         client_socket.close()
-        print(f"Connection closed from {addr}")
+        debug(f"Connection closed from {addr}")
 # end handle_client()
 
 def p2p_help_commands():
@@ -405,6 +447,12 @@ def main():
     server_thread.start()
 
     server_ready.wait() # wait on P2P server to start
+
+    try:
+        first_gossip(host, p2p_port, peer_id) # Send a first gossip to a Well-Known-Host from this peer
+    except KeyboardInterrupt:
+        print("Exiting program...")
+        sys.exit(0)
 
     gossip_thread = threading.Thread(target=interval_send_gossip, args=(host, p2p_port, peer_id), daemon=True)
     gossip_thread.start()
