@@ -158,8 +158,9 @@ def interval_send_gossip(host, port, peer_id):
         time.sleep(GOSSIP_INTERVAL)
 # end interval_send_gossip
 
-def msg_send_gossip_reply(my_host, my_port, my_peer_id, my_local_files, to_host, to_port):
-    pass
+def msg_send_gossip_reply(my_host, my_port, my_peer_id, to_host, to_port):
+    reply_message = msg_build_gossip_reply(my_host, my_port, my_peer_id, []) # replace [] with a method to get local files from metadata
+
 
 # end msg_send_gossip_reply()
 #-------------------------#
@@ -283,13 +284,6 @@ def receive_msg_gossip(msg, my_peer_id, my_host, my_port):
         return # we have seen the gossip so do no more
     
     seen_gossip_ids.add(gossip_id) # new gossip to us, so add and process
-
-
-
-#     if gossip_id in seen_gossip_ids:
-#         return # we have already seen it so we do not need to process
-    
-#     seen_gossip_ids.add(gossip_id) # new gossip id to us
 
 #     # send GOSSIP_REPLY to the sender
 #     gossip_reply = msg_build_gossip_reply(host, port, peer_id, []) # TODO - send actual file metadata instead of []
