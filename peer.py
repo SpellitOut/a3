@@ -5,6 +5,7 @@ import time
 import uuid
 import random
 import socket
+import datetime
 import threading
 
 #---# WELL KNOWN HOST INFORMATION #---#
@@ -98,6 +99,7 @@ def first_gossip(my_host, my_port, my_peer_id):
     Send a first gossip message to a known host to let them know this peer exists
     """
     msg_send_gossip(my_host, my_port, my_peer_id, KNOWN_HOST, KNOWN_PORT)
+    print(f"Sent initial gossip to well-known-host at {KNOWN_HOST}:{KNOWN_PORT}")
 # end first_gossip()
 
 def n_peer_gossip(n, my_host, my_port, my_peer_id, msg_override=None):
@@ -118,8 +120,6 @@ def n_peer_gossip(n, my_host, my_port, my_peer_id, msg_override=None):
         if peer_id == my_peer_id:
             continue # skip this peer
         msg_send_gossip(my_host, my_port, my_peer_id, peer_info["host"], peer_info["port"], msg_override)
-
-
 # end n_peer_gossip()
 
 def msg_send_gossip(my_host, my_port, my_peer_id, to_host, to_port, msg_override=None):
@@ -149,7 +149,10 @@ def msg_send_gossip(my_host, my_port, my_peer_id, to_host, to_port, msg_override
         with socket.create_connection((to_host, to_port), timeout=5) as sock:
             sock.sendall(json.dumps(gossip_message).encode())
     except Exception as e:
-        print(f"Failed to send gossip to {to_host}:{to_port}: {e}")
+        debug(f"Failed to send gossip to {to_host}:{to_port}: {e}")
+        remove_peer(to_host, to_port)
+
+
 # end msg_send_gossip
 
 def interval_send_gossip(my_host, my_port, my_peer_id):
@@ -159,7 +162,8 @@ def interval_send_gossip(my_host, my_port, my_peer_id):
     """
     while True:
         n_peer_gossip(len(tracked_peers), my_host, my_port, my_peer_id)
-        print(f"Sent gossip message to {len(tracked_peers)} peers")
+        if(len(tracked_peers) > 0):
+            print(f"Sent gossip message to {len(tracked_peers)} peers")
         time.sleep(GOSSIP_INTERVAL)
 # end interval_send_gossip
 
@@ -247,6 +251,17 @@ def peer_cleanup():
         remove_old_peers()
         time.sleep(PEER_CLEANUP_INTERVAL)
 # end peer_cleanup()
+
+def remove_peer(host, port):
+    """
+    Remove a peer from tracked peers right away
+    """
+    for peer_id, peer_info in list(tracked_peers.items()):
+        if peer_info["host"] == host and peer_info["port"] == port:
+            print(f"Removing unreachable peer {peer_id} at {host}:{port}")
+            del tracked_peers[peer_id]
+            break
+# end remove_peer()
 
 def remove_old_peers(timeout=PEER_TIMEOUT):
     """
@@ -348,7 +363,7 @@ def handle_message(msg, my_peer_id, my_host, my_port):
         debug("Handling GOSSIP_REPLY")
         receive_msg_gossip_reply(msg, my_peer_id, my_host, my_port)
     else:
-        print(f"Unhandled Message Type")
+        print(f"Unhandled Message Type: {type}")
 # end handle_message()
 
 def handle_client(client_socket, addr, peer_id, host, port):
@@ -362,7 +377,7 @@ def handle_client(client_socket, addr, peer_id, host, port):
             debug(f"Received connection my myself. Ignoring.")
             return # ignore because it's my own message
         if msg:
-            print(f"Received from {addr}: {msg}")
+            debug(f"Received from {addr}: {msg}")
             handle_message(msg, peer_id, host, port)
     except Exception as e:
         print(f"Exception while communicating with {addr}: {e}")
@@ -417,7 +432,14 @@ def p2p_server(peer_id, host, port, http_port):
 # the command line                #
 #---------------------------------#
 def command_peers():
-    print(tracked_peers)
+    """
+    Print all currently tracked peers
+    """
+    for peer_id, peer_info in tracked_peers.items():
+        host = peer_info["host"]
+        port = peer_info["port"]
+        last_seen = datetime.datetime.fromtimestamp(peer_info["last_seen"]).strftime("%a %b %d %H:%M:%S %Y")
+        print(f"{peer_id} at {host}:{port} - Last seen: {last_seen}")
 # end command_list()
 
 def parse_cli_args():
