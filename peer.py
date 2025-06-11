@@ -24,7 +24,8 @@ DEBUG_ENABLED = False
 
 #---# Program Constants #---#
 METADATA_FILE = "metadata.json"
-PEER_TIMEOUT = 60 #seconds
+PEER_TIMEOUT = 60 #seconds # How long must a peer be inactive for before it is untracked
+PEER_CLEANUP_INTERVAL = 10 #seconds # How long between checking for inactive peers
 GOSSIP_INTERVAL = 30 #seconds -- How often peer gossips
 GOSSIP_PEER_COUNT = 3 # how many peers do we attempt to gossip to
 #---------------------------#
@@ -137,6 +138,8 @@ def msg_send_gossip(my_host, my_port, my_peer_id, to_host, to_port):
         to_host : the host of receiver
         to_port : the port of receiver
     """
+    remove_old_peers() # make sure we only send to active peers
+
     gossip_message = msg_build_gossip(my_host, my_port, my_peer_id)
     seen_gossip_ids.add(gossip_message["id"])
 
@@ -159,9 +162,23 @@ def interval_send_gossip(host, port, peer_id):
 # end interval_send_gossip
 
 def msg_send_gossip_reply(my_host, my_port, my_peer_id, to_host, to_port):
+    """
+    Sends a gossip reply message.
+
+    Parameters:
+        my_host : the host of sender
+        my_port : the port of sender
+        my_peer_id : the peer id of the sender
+
+        to_host : the host of receiver
+        to_port : the port of receiver
+    """
     reply_message = msg_build_gossip_reply(my_host, my_port, my_peer_id, []) # replace [] with a method to get local files from metadata
-
-
+    try:
+        with socket.create_connection((to_host, to_port), timeout=5) as sock:
+            sock.sendall(json.dumps(reply_message).encode())
+    except Exception as e:
+        print(f"Failed to send gossip_reply to {to_host}:{to_port}: {e}")
 # end msg_send_gossip_reply()
 #-------------------------#
 # end of Message Sending  #
@@ -220,6 +237,15 @@ def update_tracked_peer(host, port, peer_id):
     }
 # end update_tracked_peer()
 
+def peer_cleanup():
+    """
+    Periodically checks our tracked peers to see if any are inactive. Interval set by PEER_CLEANUP_INTERVAL
+    """
+    while True:
+        remove_old_peers()
+        time.sleep(PEER_CLEANUP_INTERVAL)
+# end peer_cleanup()
+
 def remove_old_peers(timeout=PEER_TIMEOUT):
     """
     Removes peers from tracked peers that have not been heard from in timeout seconds
@@ -274,7 +300,6 @@ def receive_msg_gossip(msg, my_peer_id, my_host, my_port):
     """
     Handles a GOSSIP message received by this peer.
     """
-    pass
     the_host = msg["host"]
     the_port = msg["port"]
     gossip_id = msg["id"]
@@ -284,16 +309,28 @@ def receive_msg_gossip(msg, my_peer_id, my_host, my_port):
         return # we have seen the gossip so do no more
     
     seen_gossip_ids.add(gossip_id) # new gossip to us, so add and process
+    update_tracked_peer(the_host, the_port, the_peer_id) # track the peer who gossiped to us
 
-#     # send GOSSIP_REPLY to the sender
-#     gossip_reply = msg_build_gossip_reply(host, port, peer_id, []) # TODO - send actual file metadata instead of []
-#     send_message(gossip_reply, the_host, the_port)
+    msg_send_gossip_reply(my_host, my_port, my_peer_id, the_host, the_port)
 
-#     # Repeat GOSSIP to GOSSIP_PEER_COUNT random known peers
-#     repeat_to_peers = [p for p in tracked_peers.values() if p["peerId"]]
+    # Repeat GOSSIP to GOSSIP_PEER_COUNT random known peers
+    # repeat_to_peers = [p for p in tracked_peers.values() if p["peerId"]]
+# end receive_msg_gossip
 
+def receive_msg_gossip_reply(msg, my_peer_id, my_host, my_port):
+    """
+    Handles a GOSSIP_REPLY message received by this peer.
+    """
+    the_host = msg["host"]
+    the_port = msg["port"]
+    the_peer_id = msg["peerId"]
+    the_local_files = msg["files"]
 
-# end msg_handle_gossip
+    update_tracked_peer(the_host, the_port, the_peer_id) # track the peer who gossiped a reply to us
+
+    #TODO - update file metadata
+
+# end receive_msg_gossip_reply
 
 def handle_message(msg, my_peer_id, my_host, my_port):
     """
@@ -302,10 +339,11 @@ def handle_message(msg, my_peer_id, my_host, my_port):
     type = msg["type"]
 
     if type == "GOSSIP":
-        receive_msg_gossip(msg, my_peer_id, my_host, my_port)
         debug("Handling GOSSIP")
+        receive_msg_gossip(msg, my_peer_id, my_host, my_port)
     elif type == "GOSSIP_REPLY":
         debug("Handling GOSSIP_REPLY")
+        receive_msg_gossip_reply(msg, my_peer_id, my_host, my_port)
     else:
         print(f"Unhandled Message Type")
 # end handle_message()
@@ -375,6 +413,10 @@ def p2p_server(peer_id, host, port, http_port):
 # code related to managing        #
 # the command line                #
 #---------------------------------#
+def command_peers():
+    print(tracked_peers)
+# end command_list()
+
 def parse_cli_args():
     """
     Parses the command line interface arguments provided at runtime, and sets program values accordingly
@@ -424,6 +466,7 @@ def command_line():
                 debug("listing received")
             case "peers":
                 # show tracked peers
+                command_peers()
                 debug("tracking peers")
             case "push":
                 # handle push
@@ -446,6 +489,9 @@ def command_line():
 #---------------------------------#
 
 def main():
+    """
+    Handles setup of threads for multithreading and starts processes.
+    """
     peer_id, host, p2p_port, http_port, base_path = parse_cli_args() # get initial arguments
     debug("Peer ID:", peer_id, "Host:", host, "P2P Port:", p2p_port, "HTTP Port:", http_port, "Base Path:", base_path)
 
@@ -459,6 +505,9 @@ def main():
     except KeyboardInterrupt:
         print("Exiting program...")
         sys.exit(0)
+
+    peer_cleanup_thread = threading.Thread(target=peer_cleanup, daemon=True)
+    peer_cleanup_thread.start()
 
     gossip_thread = threading.Thread(target=interval_send_gossip, args=(host, p2p_port, peer_id), daemon=True)
     gossip_thread.start()
