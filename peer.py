@@ -588,6 +588,8 @@ def p2p_help_commands():
           "Use 'push <filepath>' to upload files\n" + 
           "Use 'list' to view available files\n" +
           "Use 'peers' to view connected peers\n" + 
+          "User 'ls' to list the contents of your current directory\n" +
+          "Use 'help' to view these commands again\n" +
           "Use 'exit' to quit"
           )
 # end p2p_help_commands()
@@ -635,6 +637,11 @@ def command_peers():
         last_seen = datetime.datetime.fromtimestamp(peer_info["last_seen"]).strftime("%a %b %d %H:%M:%S %Y")
         print(f"{peer_id} at {host}:{port} - Last seen: {last_seen}")
 # end command_list()
+
+def command_ls(path=DEFAULT_BASE_PATH):
+    for entry in os.listdir(path):
+        print(entry)
+# end command_ls()
 
 def parse_cli_args():
     """
@@ -687,6 +694,14 @@ def command_line(my_peer_id):
         arg = tokens[1] if len(tokens) > 1 else None
 
         match cmd:
+            case "help":
+                # show commands to peer
+                p2p_help_commands()
+
+            case "ls":
+                # list directory
+                command_ls()
+
             case "list":
                 # show file metadata
                 debug("listing received")
