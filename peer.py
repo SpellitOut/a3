@@ -79,6 +79,7 @@ def update_metadata(file_id, file_metadata):
 
     if old is None or file_metadata["file_timestamp"] > old["file_timestamp"]:
         metadata[file_id] = file_metadata
+        save_metadata(metadata)
         return True # updated or added successfully
     return False # No update
 # end update_metadata()
@@ -144,6 +145,7 @@ def hash_sha256(data, time):
     hashBase.update(str(time).encode())
     hash = hashBase.hexdigest()
     return hash
+# end hash_sha256
 
 def send_message(msg, to_host, to_port):
     """
@@ -167,6 +169,8 @@ def push_file(file_path, my_peer_id):
         print(f"File '{file_path}' not found.")
         return
     
+    print(f"Pushing file '{file_path}'...")
+
     # load up the file
     with open(file_path, "rb") as f:
         file_contents = f.read()
@@ -188,16 +192,33 @@ def push_file(file_path, my_peer_id):
     with open(path, "wb") as f:
         f.write(file_contents)
 
+    print(f"File saved locally as: {file_id}")
+
     update_metadata(file_id, file_metadata) # add/update metadata on a file
 
-    #TODO - pick 1 peer to send file to
+    if tracked_peers: # if we have a tracked peer, send to 1 of them
+        to_peer = random.choice(list(tracked_peers.items()))
+        to_host = to_peer[1]["host"]
+        to_port = to_peer[1]["port"]
+        send_file(file_contents, file_metadata, to_host, to_port, to_peer)
 
     # ANNOUNCE to all peers
     for peer in tracked_peers.values():
-        msg_send_announce(my_peer_id, file_metadata, peer["host"], peer["port"])
+        msg_send_announce(my_peer_id, file_metadata, peer["host"], peer["port"], peer)
+
+    print(f"File '{file_metadata["file_name"]}' pushed to the network with ID: {file_id}")
 # end push_file()
 
-def msg_send_announce(my_peer_id, file_metadata, to_host, to_port):
+def send_file(content, file_metadata, to_host, to_port, to_peer):
+    """
+    Sends a file from this peer to a peer
+    """
+    msg = msg_build_file_data(content, file_metadata)
+    sent = send_message(msg, to_host, to_port)
+    if sent:
+        print(f"File '{file_metadata["file_name"]}' pushed to peer ({to_host}:{to_port})")
+
+def msg_send_announce(my_peer_id, file_metadata, to_host, to_port, to_peer):
     """
     Sends an announce message with info on a file to the to_host at to_port
     """
@@ -206,11 +227,10 @@ def msg_send_announce(my_peer_id, file_metadata, to_host, to_port):
     try:
         with socket.create_connection((to_host, to_port), timeout=5) as sock:
             sock.sendall(json.dumps(msg).encode())
-            print(f"Announced file to {to_host}:{to_port}")
+            print(f"Announced file to peer {to_peer} at {to_host}:{to_port}")
     except Exception as e:
-        print(f"Failed to announce to {to_host}:{to_port}: {e}")
-
-
+        print(f"Failed to announce to peer {to_peer} at {to_host}:{to_port}: {e}")
+# end msg_send_announce
 
 def first_gossip(my_host, my_port, my_peer_id):
     """
@@ -347,6 +367,15 @@ def msg_build_announce(peer_id, file_metadata):
         **file_metadata
     }
 # end msg_build_announce()
+
+def msg_build_file_data(content, file_metadata):
+    """Build a message for FILE_DATA format"""
+    return {
+        "type": "FILE_DATA",
+        **file_metadata,
+        "data": hex(content)
+    }
+# end msg_build_file_data()
 #--------------------------#
 # end of Message Building  #
 #--------------------------#
@@ -460,7 +489,7 @@ def receive_msg_gossip(msg, my_peer_id, my_host, my_port):
 
     # Forward the message to some of my known peers
     n_peer_gossip(GOSSIP_PEER_COUNT, my_host, my_port, my_peer_id, msg)
-# end receive_msg_gossip
+# end receive_msg_gossip()
 
 def receive_msg_gossip_reply(msg, my_peer_id, my_host, my_port):
     """
@@ -473,9 +502,39 @@ def receive_msg_gossip_reply(msg, my_peer_id, my_host, my_port):
 
     update_tracked_peer(the_host, the_port, the_peer_id) # track the peer who gossiped a reply to us
 
-    #TODO - update file metadata
+    # update metadata of all the received files
+    for file_metadata in the_local_files:
+        file_id = file_metadata["file_id"]
+        updated_file = update_metadata(file_id, file_metadata)
+        if updated_file:
+            print(f"Updated metadata for file '{file_id}'")
+# end receive_msg_gossip_reply()
 
-# end receive_msg_gossip_reply
+def receive_msg_announce(msg):
+    """
+    Handles an ANNOUNCE message by updating this peers known metadata
+    """
+
+    file_metadata = {
+        "file_name": msg["file_name"],
+        "file_size": msg["file_size"],
+        "file_id": msg["file_id"],
+        "file_owner": msg["file_owner"],
+        "file_timestamp": msg["file_timestamp"]
+    }
+    peer_id = msg["from"]
+    file_name = msg["file_name"]
+    print(f"Received file announcement from {peer_id}: {file_name} ({file_id})")
+
+    file_id = file_metadata["file_id"]
+    updated_file = update_metadata(file_id, file_metadata)
+    if updated_file:
+        print(f"Metadata updated for announced file: '{file_name}'")
+# end receive_msg_announce()
+
+def receive_msg_file_data():
+    pass
+# end receive_msg_file_data()
 
 def handle_message(msg, my_peer_id, my_host, my_port):
     """
