@@ -35,8 +35,6 @@ Commands
 
 Other
  - Upon joining - Load a few (3-5) files by GET_FILE from different peers
- - GOSSIP-REPLY - Contain only the files the peers has locally.
-    --Currently my gossip replys are sending ALL the metadata (all files known on the network), not just the ones I have locally.
  - "Size in MB" according to metadata and peer statistic page. 
     Maybe too hard to implement since many of my test files are SMALL and does not make sense to store file_size in MB. Best to just format in MB and display 
     e.g file_size/1024 = KB
@@ -129,34 +127,37 @@ def save_metadata(data):
         debug(f"Failed to write metadata to {METADATA_FILE}: {e}")
 #end save_metadata()
 
-# def addMetadata(filename, owner):
-#     """
-#     Adds relevant metadata (owner, timestamp, filesize) to filename and then saves the metadata 
-#     """
-#     try:
-#         metadata = loadMetadata()
-#         timestamp = datetime.now().strftime(TIMESTAMP_FORMAT)
-#         metadata[filename] = {
-#             "owner": owner,
-#             "filesize": os.path.getsize(f"{SERVER_FILE_PATH}/{filename}"),
-#             "timestamp": timestamp
-#         }
-#         saveMetadata(metadata)
-#     except FileNotFoundError as e:
-#         print(f"Error: {e}")
+def get_local_file_entries(metadata, directory="FileUploads"):
+    """Return list of file metadata for files present in the directory"""
+    local_files = set(os.listdir(directory))
+    local_entries = []
 
-# def deleteMetadata(filename):
-#     """
-#     Removes metadata for filename from METADATA_FILE
-#     """
-#     try:
-#         metadata = loadMetadata()
-#         if filename in metadata:
-#             metadata.pop(filename)
-#             saveMetadata(metadata)
-#     except FileNotFoundError as e:
-#         print(f"Error: {e}")
-# # end of Functions for Managing the file Metadata
+    for file_id, entry in metadata.items():
+        if file_id in local_files:
+            local_entries.append(entry)
+
+    return local_entries
+# end get_local_file_entries()
+
+def get_remote_file_entries(metadata, directory="FileUploads"):
+    """Return list of file metadata for files NOT present in the directory"""
+    local_files = set(os.listdir(directory))
+    remote_entries = []
+
+    for file_id, entry in metadata.items():
+        if file_id not in local_files:
+            remote_entries.append(entry)
+
+    return remote_entries
+# end get_remote_file_entries()
+
+def add_peer_to_file(file_info, peer_id):
+    pass
+#end add_peer_to_file()
+
+def remove_peer_from_files(peer_id):
+    pass
+#end remove_peer_from_files()
 #-----------------------------#
 # end of Metadata Management  #
 #-----------------------------#
@@ -387,7 +388,7 @@ def msg_build_gossip_reply(host, port, peer_id):
 
     # make sure we include the files known to us
     metadata = load_metadata()
-    local_files = list(metadata.values())
+    local_files = get_local_file_entries(metadata)
 
     return {
         "type": "GOSSIP_REPLY",
@@ -660,7 +661,7 @@ def p2p_help_commands():
     """
     print(f"Use 'get <file_id> [destination]' to download files\n" + 
           "Use 'push <filepath>' to upload files\n" + 
-          "Use 'list' to view available files\n" +
+          "Use 'list' to view available files. Can also use 'list local', 'list remote', or 'list both' to show known files.\n" +
           "Use 'peers' to view connected peers\n" + 
           "User 'ls' to list the contents of your current directory\n" +
           "Use 'help' to view these commands again\n" +
@@ -701,15 +702,31 @@ def p2p_server(peer_id, host, port, http_port):
 # code related to managing        #
 # the command line                #
 #---------------------------------#
-def command_list():
+def command_list(option="both"):
     """
     List file metadatas on this peer
+
+    Parameters:
+        option (str): 'local', 'remote', or default, 'both'. Lists the file metadatas.
+            'local': list files stored locally
+            'remote': list files NOT stored locally
+            'both': list files stored locally as well as files NOT stored locally
     """
     metadata = load_metadata()
-    local_files = list(metadata.values())
-    for file in local_files:
-        file_id = file["file_id"]
-        file_name = file["file_name"]
+
+    if option=="local":
+        files = get_local_file_entries(metadata)
+        print("Local files:")
+    elif option=="remote":
+        files = get_remote_file_entries(metadata)
+        print("Remote files:")
+    else:
+        files = list(metadata.values())
+        print("All known files:")
+
+    for f in files:
+        file_id = f["file_id"]
+        file_name = f["file_name"]
         #TODO - track the peers that have the file
         print(f"{file_id}: {file_name} - Peers: *TODO*")
 # end command_list()
@@ -800,7 +817,10 @@ def command_line(my_peer_id):
 
             case "list":
                 # show file metadata
-                command_list()
+                if arg:
+                    command_list(arg)
+                else:
+                    command_list()
 
             case "peers":
                 # show tracked peers
