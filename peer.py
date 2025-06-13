@@ -9,6 +9,36 @@ import hashlib
 import datetime
 import threading
 
+"""
+TODO - 
+
+Metadata
+ - Peers that have the file (List all the peers with the file)
+    --add peers who have the file, remove peers who are inactive
+ - Clean up metadata when none of the peers online has the file.
+
+Peer Statistics Page
+ - Tracked Peers (PeerName,Host,Port)
+ - File Metadata information (Id, Name, Owner, Size,Timestamp, hasCopy, peers_with_file)
+
+Commands
+ - list
+    --just need to show the peers that have the file, see "Metadata" section above
+ - get <fileId> - Download a file to local files
+    --Should announce the local file to the other peers
+    --support GET operation for local files
+    --support GET operation for remote files
+    --Keep new files in the local storage and announce them.
+    --Support FILE_DATA msg to receive a new file pushed by another peer.
+ - delete <fileId> - Delete a file (if you’re the owner)
+    --Should replicate the command to all peers with this file locally
+
+Other
+ - Upon joining - Load a few (3-5) files by GET_FILE from different peers
+ - GOSSIP-REPLY - Contain only the files the peers has locally.
+    --Currently my gossip replys are sending ALL the metadata (all files known on the network), not just the ones I have locally.
+"""
+
 #---# WELL KNOWN HOST INFORMATION #---#
 # You may adjust these values to      #
 # match a well-known-host of your own #
