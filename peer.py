@@ -317,7 +317,7 @@ def msg_send_gossip_reply(my_host, my_port, my_peer_id, to_host, to_port):
         to_host : the host of receiver
         to_port : the port of receiver
     """
-    reply_message = msg_build_gossip_reply(my_host, my_port, my_peer_id, []) # replace [] with a method to get local files from metadata
+    reply_message = msg_build_gossip_reply(my_host, my_port, my_peer_id) # replace [] with a method to get local files from metadata
     try:
         with socket.create_connection((to_host, to_port), timeout=5) as sock:
             sock.sendall(json.dumps(reply_message).encode())
@@ -348,8 +348,13 @@ def msg_build_gossip(host, port, peer_id):
     }
 # end msg_build_gossip()
 
-def msg_build_gossip_reply(host, port, peer_id, local_files):
+def msg_build_gossip_reply(host, port, peer_id):
     """Build a message for GOSSIP_REPLY format"""
+
+    # make sure we include the files known to us
+    metadata = load_metadata()
+    local_files = list(metadata.values())
+
     return {
         "type": "GOSSIP_REPLY",
         "host": host,
@@ -514,7 +519,6 @@ def receive_msg_announce(msg):
     """
     Handles an ANNOUNCE message by updating this peers known metadata
     """
-
     file_metadata = {
         "file_name": msg["file_name"],
         "file_size": msg["file_size"],
@@ -553,7 +557,7 @@ def handle_message(msg, my_peer_id, my_host, my_port):
         receive_msg_announce(msg)
     elif type == "FILE_DATA":
         #TODO
-        debug("TODO handle file_data")
+        debug("Handling file_data")
         #TODO
         receive_msg_file_data()
     else:
