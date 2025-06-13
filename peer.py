@@ -536,8 +536,46 @@ def receive_msg_announce(msg):
         print(f"Metadata updated for announced file: '{file_name}'")
 # end receive_msg_announce()
 
-def receive_msg_file_data():
-    pass
+def receive_msg_file_data(msg):
+    """
+    Handles a FILE_DATA message by saving the file locally and updates metadata
+    """
+    file_name = msg["file_name"]
+    file_size = msg["file_size"]
+    file_id = msg["file_id"]
+    file_owner = msg["file_owner"]
+    file_timestamp = msg["file_timestamp"]
+    data_hex = msg["data"]
+
+    # decode hex back into bytes
+    try:
+        file_bytes = bytes.fromhex(data_hex)
+    except ValueError:
+        debug("Received FILE_DATA with invalid hex data.")
+        return
+
+    # save the file locally
+    file_path = os.path.join(FILE_UPLOAD_PATH, file_id)
+    print(f"Saving file '{file_name}' - this may take a while for large files...")
+    try:
+        with open(file_path, "wb") as f:
+            f.write(file_bytes)
+        print(f"Downloaded {file_size/1024:.2f} KB for file '{file_name}'")
+    except IOError as e:
+        print(f"Failed to save file '{file_name}': {e}")
+        return
+    
+    # create the metadata from the message so we can update our metadata
+    file_metadata = {
+        "file_name": file_name,
+        "file_size": file_size,
+        "file_id": file_id,
+        "file_owner": file_owner,
+        "file_timestamp": file_timestamp
+    }
+
+    # update our metadata
+    update_metadata(file_id, file_metadata)
 # end receive_msg_file_data()
 
 def handle_message(msg, my_peer_id, my_host, my_port):
@@ -556,10 +594,8 @@ def handle_message(msg, my_peer_id, my_host, my_port):
         debug("Handling ANNOUNCE")
         receive_msg_announce(msg)
     elif type == "FILE_DATA":
-        #TODO
         debug("Handling file_data")
-        #TODO
-        receive_msg_file_data()
+        receive_msg_file_data(msg)
     else:
         print(f"Unhandled Message Type: {type}")
 # end handle_message()
