@@ -665,59 +665,33 @@ def parse_cli_args():
     return peer_id, host, p2p_port, http_port, base_path
 #end parse_cli_args()
 
-def command_line(my_peer_id):
+def command_line():
     """
     Repeatedly takes in inputs to process
     """
     while True:
-        cmd_input = input("> ").strip()
-        if not cmd_input:
-            continue # ignore the empty inputs
-
-        tokens = cmd_input.split(maxsplit=1)
-        cmd = tokens[0]
-        arg = tokens[1] if len(tokens) > 1 else None
-
+        cmd = input("> ").strip()
         match cmd:
             case "list":
                 # show file metadata
                 debug("listing received")
-
             case "peers":
                 # show tracked peers
                 command_peers()
                 debug("tracking peers")
-
             case "push":
                 # handle push
-                if arg:
-                    push_file(arg, my_peer_id)
-                    debug(f"handling push for {arg}")
-                else:
-                    print("Usage: push <Path>")
+                debug("handling push")
             case "get":
                 # handle get
-                if arg:
-                    #TODO
-                    #get_file(arg, my_peer_id)
-                    debug(f"handling get for {arg}")
-                else:
-                    print("Usage: get <fileId>")
-
+                debug("handling get") 
             case "delete":
                 # handle delete
-                if arg:
-                    #TODO
-                    #delete_file(arg)
-                    debug(f"handling delete for {arg}")
-                else:
-                    print("Usage: delete <fileId>")
-
+                debug("handling delete")
             case "exit":
                 # exit program
                 print(f"Exiting program...")
                 break
-
             case _: # default, error protection
                 debug("Bad command")
 # end command_line()
@@ -750,7 +724,7 @@ def main():
     gossip_thread.start()
 
     try:
-        command_line(peer_id)
+        command_line()
     except KeyboardInterrupt:
         print("Exiting program...")
         sys.exit(0)
