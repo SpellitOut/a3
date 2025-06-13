@@ -159,6 +159,10 @@ def send_message(msg, to_host, to_port):
 # end send_message()
 
 def push_file(file_path, my_peer_id):
+    """
+    Pushes a file locally to this peer, and forwards the file to up to 1 other peer.
+    Then announces the new file to all tracked peers.
+    """
     if not os.path.isfile(file_path):
         print(f"File '{file_path}' not found.")
         return
