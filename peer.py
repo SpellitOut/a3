@@ -158,7 +158,7 @@ def send_message(msg, to_host, to_port):
         return False
 # end send_message()
 
-def push_file(file_path, peer_id):
+def push_file(file_path, my_peer_id):
     if not os.path.isfile(file_path):
         print(f"File '{file_path}' not found.")
         return
@@ -175,7 +175,7 @@ def push_file(file_path, peer_id):
         "file_name": os.path.basename(file_path),
         "file_size": len(file_contents),
         "file_id": file_id,
-        "file_owner": peer_id,
+        "file_owner": my_peer_id,
         "file_timestamp": timestamp
     }
 
@@ -188,10 +188,25 @@ def push_file(file_path, peer_id):
 
     #TODO - pick 1 peer to send file to
 
-    #TODO - announce to all peers
-
-    pass
+    # ANNOUNCE to all peers
+    for peer in tracked_peers.values():
+        msg_send_announce(my_peer_id, file_metadata, peer["host"], peer["port"])
 # end push_file()
+
+def msg_send_announce(my_peer_id, file_metadata, to_host, to_port):
+    """
+    Sends an announce message with info on a file to the to_host at to_port
+    """
+    msg = msg_build_announce(my_peer_id, file_metadata)
+
+    try:
+        with socket.create_connection((to_host, to_port), timeout=5) as sock:
+            sock.sendall(json.dumps(msg).encode())
+            print(f"Announced file to {to_host}:{to_port}")
+    except Exception as e:
+        print(f"Failed to announce to {to_host}:{to_port}: {e}")
+
+
 
 def first_gossip(my_host, my_port, my_peer_id):
     """
@@ -318,7 +333,16 @@ def msg_build_gossip_reply(host, port, peer_id, local_files):
         "peerId": peer_id,
         "files": local_files
     }
-# end msg_build_gossip_reply
+# end msg_build_gossip_reply()
+
+def msg_build_announce(peer_id, file_metadata):
+    """Build a message for ANNOUNCE format"""
+    return {
+        "type": "ANNOUNCE",
+        "from": peer_id,
+        **file_metadata
+    }
+# end msg_build_announce()
 #--------------------------#
 # end of Message Building  #
 #--------------------------#
