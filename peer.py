@@ -37,6 +37,10 @@ Other
  - Upon joining - Load a few (3-5) files by GET_FILE from different peers
  - GOSSIP-REPLY - Contain only the files the peers has locally.
     --Currently my gossip replys are sending ALL the metadata (all files known on the network), not just the ones I have locally.
+ - "Size in MB" according to metadata and peer statistic page. 
+    Maybe too hard to implement since many of my test files are SMALL and does not make sense to store file_size in MB. Best to just format in MB and display 
+    e.g file_size/1024 = KB
+        file_size/1024/1024 = MB
 """
 
 #---# WELL KNOWN HOST INFORMATION #---#
