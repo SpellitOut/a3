@@ -667,6 +667,19 @@ def p2p_server(peer_id, host, port, http_port):
 # code related to managing        #
 # the command line                #
 #---------------------------------#
+def command_list():
+    """
+    List file metadatas on this peer
+    """
+    metadata = load_metadata()
+    local_files = list(metadata.values())
+    for file in local_files:
+        file_id = file["file_id"]
+        file_name = file["file_name"]
+        #TODO - track the peers that have the file
+        print(f"{file_id}: {file_name} - Peers: *TODO*")
+# end command_list()
+
 def command_peers():
     """
     Print all currently tracked peers
@@ -676,7 +689,7 @@ def command_peers():
         port = peer_info["port"]
         last_seen = datetime.datetime.fromtimestamp(peer_info["last_seen"]).strftime("%a %b %d %H:%M:%S %Y")
         print(f"{peer_id} at {host}:{port} - Last seen: {last_seen}")
-# end command_list()
+# end command_peers()
 
 def command_ls(path=DEFAULT_BASE_PATH):
     """
@@ -753,12 +766,11 @@ def command_line(my_peer_id):
 
             case "list":
                 # show file metadata
-                debug("listing received")
+                command_list()
 
             case "peers":
                 # show tracked peers
                 command_peers()
-                debug("tracking peers")
 
             case "push":
                 # handle push
