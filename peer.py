@@ -639,8 +639,17 @@ def command_peers():
 # end command_list()
 
 def command_ls(path=DEFAULT_BASE_PATH):
-    for entry in os.listdir(path):
-        print(entry)
+    """
+    Print the file contents of the path with details
+    """
+    print(f"{'Name':30}\t{'Size (bytes)':12}\t{'Modified Time'}")
+    print("-" * 70)
+    for entry in os.scandir(path):
+        info = entry.stat()
+        name = entry.name
+        size = info.st_size
+        mtime = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(info.st_mtime))
+        print(f"{name:30}\t{size:12}\t{mtime}")
 # end command_ls()
 
 def parse_cli_args():
