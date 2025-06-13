@@ -5,6 +5,7 @@ import time
 import uuid
 import random
 import socket
+import hashlib
 import datetime
 import threading
 
@@ -25,6 +26,7 @@ DEBUG_ENABLED = False
 
 #---# Program Constants #---#
 METADATA_FILE = "metadata.json"
+FILE_UPLOAD_PATH = "FileUploads"
 PEER_TIMEOUT = 60 #seconds # How long must a peer be inactive for before it is untracked
 PEER_CLEANUP_INTERVAL = 10 #seconds # How long between checking for inactive peers
 GOSSIP_INTERVAL = 30 #seconds -- How often peer gossips
@@ -67,6 +69,20 @@ def load_metadata():
     return metadata
 #end load_metadata()
 
+def update_metadata(file_id, file_metadata):
+    """
+    Add or update a file entry in the metadata.
+    Only updates if the file is new or has a newer timestamp
+    """
+    metadata = load_metadata()
+    old = metadata.get(file_id)
+
+    if old is None or file_metadata["file_timestamp"] > old["file_timestamp"]:
+        metadata[file_id] = file_metadata
+        return True # updated or added successfully
+    return False # No update
+# end update_metadata()
+
 def save_metadata(data):
     """
     Saves the metadata to the file
@@ -77,6 +93,35 @@ def save_metadata(data):
     except IOError as e:
         debug(f"Failed to write metadata to {METADATA_FILE}: {e}")
 #end save_metadata()
+
+# def addMetadata(filename, owner):
+#     """
+#     Adds relevant metadata (owner, timestamp, filesize) to filename and then saves the metadata 
+#     """
+#     try:
+#         metadata = loadMetadata()
+#         timestamp = datetime.now().strftime(TIMESTAMP_FORMAT)
+#         metadata[filename] = {
+#             "owner": owner,
+#             "filesize": os.path.getsize(f"{SERVER_FILE_PATH}/{filename}"),
+#             "timestamp": timestamp
+#         }
+#         saveMetadata(metadata)
+#     except FileNotFoundError as e:
+#         print(f"Error: {e}")
+
+# def deleteMetadata(filename):
+#     """
+#     Removes metadata for filename from METADATA_FILE
+#     """
+#     try:
+#         metadata = loadMetadata()
+#         if filename in metadata:
+#             metadata.pop(filename)
+#             saveMetadata(metadata)
+#     except FileNotFoundError as e:
+#         print(f"Error: {e}")
+# # end of Functions for Managing the file Metadata
 #-----------------------------#
 # end of Metadata Management  #
 #-----------------------------#
@@ -90,9 +135,63 @@ def save_metadata(data):
 # messages that will be   #
 # over the p2p server     #
 #-------------------------#
-# def send_message(msg, toHost, toPort):
-#     pass
-# # end send_message()
+def hash_sha256(data, time):
+    """
+    Hashes data using sha256 and the time timestamp
+    """
+    hashBase = hashlib.sha256()
+    hashBase.update(data)
+    hashBase.update(str(time).encode())
+    hash = hashBase.hexdigest()
+    return hash
+
+def send_message(msg, to_host, to_port):
+    """
+    Sends a message to the port and host
+    """
+    try:
+        with socket.create_connection((to_host, to_port), timeout=5) as sock:
+            sock.sendall(json.dumps(msg).encode())
+            return True
+    except Exception as e:
+        print(f"Failed to send message to {to_host}:{to_port}: {e}")
+        return False
+# end send_message()
+
+def push_file(file_path, peer_id):
+    if not os.path.isfile(file_path):
+        print(f"File '{file_path}' not found.")
+        return
+    
+    # load up the file
+    with open(file_path, "rb") as f:
+        file_contents = f.read()
+
+    timestamp = int(time.time())
+
+    file_id = hash_sha256(file_contents, timestamp) # create a file_id
+
+    file_metadata = {
+        "file_name": os.path.basename(file_path),
+        "file_size": len(file_contents),
+        "file_id": file_id,
+        "file_owner": peer_id,
+        "file_timestamp": timestamp
+    }
+
+    # save the file locally
+    path = os.path.join(FILE_UPLOAD_PATH, file_id)
+    with open(path, "wb") as f:
+        f.write(file_contents)
+
+    update_metadata(file_id, file_metadata) # add/update metadata on a file
+
+    #TODO - pick 1 peer to send file to
+
+    #TODO - announce to all peers
+
+    pass
+# end push_file()
 
 def first_gossip(my_host, my_port, my_peer_id):
     """
