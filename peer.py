@@ -203,8 +203,8 @@ def push_file(file_path, my_peer_id):
         send_file(file_contents, file_metadata, to_host, to_port, to_peer)
 
     # ANNOUNCE to all peers
-    for peer in tracked_peers.values():
-        msg_send_announce(my_peer_id, file_metadata, peer["host"], peer["port"], peer)
+    for peer_id, peer_info in list(tracked_peers.items()):
+        msg_send_announce(my_peer_id, file_metadata, peer_info["host"], peer_info["port"], peer_id)
 
     print(f"File '{file_metadata["file_name"]}' pushed to the network with ID: {file_id}")
 # end push_file()
@@ -216,7 +216,7 @@ def send_file(content, file_metadata, to_host, to_port, to_peer):
     msg = msg_build_file_data(content, file_metadata)
     sent = send_message(msg, to_host, to_port)
     if sent:
-        print(f"File '{file_metadata["file_name"]}' pushed to peer ({to_host}:{to_port})")
+        print(f"File '{file_metadata["file_name"]}' pushed to peer {to_peer} ({to_host}:{to_port})")
 
 def msg_send_announce(my_peer_id, file_metadata, to_host, to_port, to_peer):
     """
@@ -373,7 +373,7 @@ def msg_build_file_data(content, file_metadata):
     return {
         "type": "FILE_DATA",
         **file_metadata,
-        "data": hex(content)
+        "data": content.hex()
     }
 # end msg_build_file_data()
 #--------------------------#
@@ -524,9 +524,9 @@ def receive_msg_announce(msg):
     }
     peer_id = msg["from"]
     file_name = msg["file_name"]
+    file_id = file_metadata["file_id"]
     print(f"Received file announcement from {peer_id}: {file_name} ({file_id})")
 
-    file_id = file_metadata["file_id"]
     updated_file = update_metadata(file_id, file_metadata)
     if updated_file:
         print(f"Metadata updated for announced file: '{file_name}'")
@@ -548,6 +548,14 @@ def handle_message(msg, my_peer_id, my_host, my_port):
     elif type == "GOSSIP_REPLY":
         debug("Handling GOSSIP_REPLY")
         receive_msg_gossip_reply(msg, my_peer_id, my_host, my_port)
+    elif type == "ANNOUNCE":
+        debug("Handling ANNOUNCE")
+        receive_msg_announce(msg)
+    elif type == "FILE_DATA":
+        #TODO
+        debug("TODO handle file_data")
+        #TODO
+        receive_msg_file_data()
     else:
         print(f"Unhandled Message Type: {type}")
 # end handle_message()
@@ -729,6 +737,15 @@ def main():
     """
     Handles setup of threads for multithreading and starts processes.
     """
+
+    # If the server file directory is missing, creates it
+    if not os.path.exists(FILE_UPLOAD_PATH):
+        print(f"{FILE_UPLOAD_PATH} directory missing. Creating directory.")
+        os.mkdir(FILE_UPLOAD_PATH)
+
+    # Load metadata
+    load_metadata()
+
     peer_id, host, p2p_port, http_port, base_path = parse_cli_args() # get initial arguments
     debug("Peer ID:", peer_id, "Host:", host, "P2P Port:", p2p_port, "HTTP Port:", http_port, "Base Path:", base_path)
 
