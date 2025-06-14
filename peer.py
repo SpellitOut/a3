@@ -324,10 +324,13 @@ def msg_send_get(file_id, my_peer_id):
         # Open a socket to send the message, and maintain that socket
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
             client_socket.connect((to_host, to_port))
+            client_socket.settimeout(30)
             client_socket.sendall(json.dumps(msg).encode())
+            print(f"OPENED SOCKET TO {client_socket} at {to_host}:{to_port}")
 
             # Wait to receive file data from them
             file_msg = receive_message(client_socket)
+            print(f"received file message: {file_msg} from SOCKET: {client_socket}")
             if file_msg:
                 handle_message(file_msg, my_peer_id, to_host, to_port, client_socket)
             else:
@@ -814,8 +817,13 @@ def receive_msg_get(msg, client_socket):
     
     response = msg_build_file_data(file_contents, file_metadata)
 
+    print(f"Received a GET message. Sending back: {response} to {client_socket}")
+
+
+
     client_socket.sendall(json.dumps(response).encode())
 
+    print(f"FILE_DATA sent on socket: {client_socket.getsockname()} -> {client_socket.getpeername()}")
     # Send 
     # peer_info = tracked_peers.get(to_peer)
     # to_host = peer_info["host"]
@@ -886,6 +894,8 @@ def handle_message(msg, my_peer_id, my_host, my_port, client_socket):
     Takes in a msg message and parses the info to pass it off to the correct message type handler
     """
     type = msg["type"]
+
+    print(f"MESSAGE RECEIVED: {msg}")
 
     if type == "GOSSIP":
         debug("Handling GOSSIP")
