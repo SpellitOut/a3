@@ -788,7 +788,6 @@ def receive_msg_get(msg, client_socket):
     Handles a GET message by checking if I still have the file that's been requested, then sending it.
     Maintains a TCP connection
     """
-    print(f"i received a get message!! {msg}")
     file_id = msg["file_id"]
     
     #to_peer = msg["from"]
@@ -893,8 +892,6 @@ def handle_message(msg, my_peer_id, my_host, my_port, client_socket):
     Takes in a msg message and parses the info to pass it off to the correct message type handler
     """
     type = msg["type"]
-
-    print(f"MESSAGE RECEIVED: {msg}")
 
     if type == "GOSSIP":
         debug("Handling GOSSIP")
