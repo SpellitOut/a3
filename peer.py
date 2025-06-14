@@ -216,7 +216,7 @@ def cleanup_on_exit(my_peer_id):
             clean_metadata[file_id] = entry
             debug(f"Preserving {entry['file_name']} (local file), resetting peers_with_file to this peer.")
         else:
-            debug(f"Removing metadata for {entry["file_name"]} (remote file).")
+            debug(f"Removing metadata for {entry['file_name']} (remote file).")
 
     save_metadata(clean_metadata)
     debug("Cleaned metadata for this peer.")
@@ -353,7 +353,7 @@ def push_file(file_path, my_peer_id):
     for peer_id, peer_info in list(tracked_peers.items()):
         msg_send_announce(my_peer_id, file_metadata, peer_info["host"], peer_info["port"], peer_id)
 
-    print(f"File '{file_metadata["file_name"]}' pushed to the network with ID: {file_id}")
+    print(f"File '{file_metadata['file_name']}' pushed to the network with ID: {file_id}")
 # end push_file()
 
 def send_file(content, file_metadata, to_host, to_port, to_peer):
@@ -363,7 +363,7 @@ def send_file(content, file_metadata, to_host, to_port, to_peer):
     msg = msg_build_file_data(content, file_metadata)
     sent = send_message(msg, to_host, to_port)
     if sent:
-        print(f"File '{file_metadata["file_name"]}' pushed to peer {to_peer} ({to_host}:{to_port})")
+        print(f"File '{file_metadata['file_name']}' pushed to peer {to_peer} ({to_host}:{to_port})")
 
 def msg_send_announce(my_peer_id, file_metadata, to_host, to_port, to_peer):
     """
