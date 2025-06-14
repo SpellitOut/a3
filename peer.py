@@ -301,18 +301,39 @@ def msg_send_get(file_id, my_peer_id):
         print(f"File {file_id} is already present locally.")
         return
 
-    msg = msg_build_get(my_peer_id, file_id)
+    
 
     peers = peers_with_file(file_id) # get a list of peers who have the file
-    if peers:
-        peer = random.choice(peers)
-        peer_info = tracked_peers.get(peer)
-        to_host = peer_info["host"]
-        to_port = peer_info["port"]
-        send_message(msg, to_host, to_port)
-    else:
+    if not peers:
         print(f"Cannot get file. No tracked peers have file {file_id}")
-    pass
+        return
+    
+
+    peer = random.choice(peers)
+    peer_info = tracked_peers.get(peer)
+    if not peer_info:
+        print(f"No connection info for peer {peer}")
+        return
+    
+    to_host = peer_info["host"]
+    to_port = peer_info["port"]
+
+    msg = msg_build_get(my_peer_id, file_id)
+
+    try:
+        # Open a socket to send the message, and maintain that socket
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
+            client_socket.connect((to_host, to_port))
+            client_socket.sendall(json.dumps(msg).encode())
+
+            # Wait to receive file data from them
+            file_msg = receive_message(client_socket)
+            if file_msg:
+                handle_message(file_msg, my_peer_id, to_host, to_port, client_socket)
+            else:
+                print(f"No FILE_DATA received in response to GET for {file_id}")
+    except Exception as e:
+        print(f"Error sending GET or receiving FILE_DATA: {e}")
 # end msg_send_get()
 
 def push_file(file_path, my_peer_id):
@@ -760,13 +781,15 @@ def receive_msg_delete(msg):
     save_metadata(metadata)
 # end receive_msg_delete()
 
-def receive_msg_get(msg):
+def receive_msg_get(msg, client_socket):
     """
-    Handles a GET message by checking if I still have the file that's been requested, then sending it
+    Handles a GET message by checking if I still have the file that's been requested, then sending it.
+    Maintains a TCP connection
     """
     print(f"i received a get message!! {msg}")
     file_id = msg["file_id"]
-    to_peer = msg["from"]
+    
+    #to_peer = msg["from"]
 
     file_path = os.path.join(FILE_UPLOAD_PATH, file_id)
 
@@ -781,7 +804,6 @@ def receive_msg_get(msg):
             "file_timestamp": None,
             "peers_with_file": None
         }
-        msg = msg_build_file_data(None, file_metadata)
     else:
         # We have the file, so send it
         # load up the file
@@ -789,13 +811,16 @@ def receive_msg_get(msg):
         file_metadata = metadata.get(file_id)
         with open(file_path, "rb") as f:
             file_contents = f.read()
-        msg = msg_build_file_data(file_contents, file_metadata)
+    
+    response = msg_build_file_data(file_contents, file_metadata)
+
+    client_socket.sendall(json.dumps(response).encode())
 
     # Send 
-    peer_info = tracked_peers.get(to_peer)
-    to_host = peer_info["host"]
-    to_port = peer_info["port"]  
-    send_file(file_contents, file_metadata, to_host, to_port, to_peer)
+    # peer_info = tracked_peers.get(to_peer)
+    # to_host = peer_info["host"]
+    # to_port = peer_info["port"]  
+    # send_file(file_contents, file_metadata, to_host, to_port, to_peer)
 # end receive_msg_get()
 
 def receive_msg_file_data(msg, my_peer_id):
@@ -856,7 +881,7 @@ def receive_msg_file_data(msg, my_peer_id):
 
 # end receive_msg_file_data()
 
-def handle_message(msg, my_peer_id, my_host, my_port):
+def handle_message(msg, my_peer_id, my_host, my_port, client_socket):
     """
     Takes in a msg message and parses the info to pass it off to the correct message type handler
     """
@@ -879,7 +904,7 @@ def handle_message(msg, my_peer_id, my_host, my_port):
         receive_msg_delete(msg)
     elif type == "GET":
         debug("Handling GET")
-        receive_msg_get(msg)
+        receive_msg_get(msg, client_socket)
     else:
         print(f"Unhandled Message Type: {type}")
 # end handle_message()
@@ -890,13 +915,16 @@ def handle_client(client_socket, addr, peer_id, host, port):
     """
     debug(f"Accepted connection from {addr}")
     try:
-        msg = receive_message(client_socket)
-        if msg.get("peerId") == peer_id:
-            debug(f"Received connection my myself. Ignoring.")
-            return # ignore because it's my own message
-        if msg:
+        while True: # loop in case of multiple messages
+            msg = receive_message(client_socket)
+            if not msg:
+                debug(f"Connection close by peer at {addr}")
+                break
+            if msg.get("peerId") == peer_id:
+                debug(f"Received connection my myself. Ignoring.")
+                continue # ignore because it's my own message
             debug(f"Received from {addr}: {msg}")
-            handle_message(msg, peer_id, host, port)
+            handle_message(msg, peer_id, host, port, client_socket)
     except Exception as e:
         print(f"Exception while communicating with {addr}: {e}")
     finally:
