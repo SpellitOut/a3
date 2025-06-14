@@ -306,7 +306,6 @@ def msg_send_get(file_id, my_peer_id):
         print(f"Cannot get file. No tracked peers have file {file_id}")
         return
     
-
     peer = random.choice(peers)
     peer_info = tracked_peers.get(peer)
     if not peer_info:
@@ -316,7 +315,7 @@ def msg_send_get(file_id, my_peer_id):
     to_host = peer_info["host"]
     to_port = peer_info["port"]
 
-    msg = msg_build_get(my_peer_id, file_id)
+    msg = msg_build_get(file_id)
 
     try:
         # Open a socket to send the message, and maintain that socket
@@ -570,12 +569,11 @@ def msg_build_delete(peer_id, file_id):
     }
 # end msg_build_delete()
 
-def msg_build_get(peer_id, file_id):
+def msg_build_get(file_id):
     """Build a message for GET format"""
     return {
-        "type": "GET",
-        "file_id": file_id,
-        "from": peer_id
+        "type": "GET_FILE",
+        "file_id": file_id
     }
 #--------------------------#
 # end of Message Building  #
@@ -688,6 +686,7 @@ def receive_message(client_socket):
         except json.JSONDecodeError:
             raise ConnectionError("Connection closed before valid JSON was received.")
     else:
+        print("this is returning BAD")
         return None
 # end receive_message()
 
@@ -908,7 +907,7 @@ def handle_message(msg, my_peer_id, my_host, my_port, client_socket):
     elif type == "DELETE":
         debug("Handling DELETE")
         receive_msg_delete(msg)
-    elif type == "GET":
+    elif type == "GET_FILE":
         debug("Handling GET")
         receive_msg_get(msg, client_socket)
     else:
