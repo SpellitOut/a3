@@ -13,7 +13,6 @@ import threading
 TODO - 
 
 Metadata
- - Peers that have the file (List all the peers with the file)
     --add peers who have the file, remove peers who are inactive
  - Clean up metadata when none of the peers online has the file.
 
@@ -22,8 +21,6 @@ Peer Statistics Page
  - File Metadata information (Id, Name, Owner, Size,Timestamp, hasCopy, peers_with_file)
 
 Commands
- - list
-    --just need to show the peers that have the file, see "Metadata" section above
  - get <fileId> - Download a file to local files
     --Should announce the local file to the other peers
     --support GET operation for local files
@@ -221,9 +218,13 @@ def cleanup_on_exit(my_peer_id):
     metadata = load_metadata()
     clean_metadata = {}
     local_files = get_local_file_entries(metadata)
+    local_files_ids = {entry["file_id"] for entry in local_files}
+
+    debug(f"Local files: {local_files}")
 
     for file_id, entry in metadata.items():
-        if file_id in local_files:
+        debug(f"file_id: {file_id}")
+        if file_id in local_files_ids:
             # keep that file, clean up peers_with_file
             entry["peers_with_file"] = [my_peer_id]
             clean_metadata[file_id] = entry
@@ -646,8 +647,8 @@ def receive_msg_announce(msg):
     file_id = file_metadata["file_id"]
     print(f"Received file announcement from {peer_id}: {file_name} ({file_id})")
 
-    add_peer_to_file(file_id, peer_id)
     updated_file = update_metadata(file_id, file_metadata)
+    add_peer_to_file(file_id, peer_id)
     if updated_file:
         print(f"Metadata updated for announced file: '{file_name}'")
 # end receive_msg_announce()
@@ -952,19 +953,18 @@ def main():
     """
     Handles setup of threads for multithreading and starts processes.
     """
+    peer_id, host, p2p_port, http_port, base_path = parse_cli_args() # get initial arguments
+    debug("Peer ID:", peer_id, "Host:", host, "P2P Port:", p2p_port, "HTTP Port:", http_port, "Base Path:", base_path)
 
     # If the server file directory is missing, creates it
     if not os.path.exists(FILE_UPLOAD_PATH):
         print(f"{FILE_UPLOAD_PATH} directory missing. Creating directory.")
         os.mkdir(FILE_UPLOAD_PATH)
 
-    cleanup_on_exit() # ensure our metadata is fresh to our local files
-
+    # ensure our metadata is fresh to our local files
+    cleanup_on_exit(peer_id) 
     # Load metadata
     load_metadata()
-
-    peer_id, host, p2p_port, http_port, base_path = parse_cli_args() # get initial arguments
-    debug("Peer ID:", peer_id, "Host:", host, "P2P Port:", p2p_port, "HTTP Port:", http_port, "Base Path:", base_path)
 
     server_thread = threading.Thread(target=p2p_server, args=(peer_id, host, p2p_port, http_port), daemon=True)
     server_thread.start()
