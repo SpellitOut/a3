@@ -209,6 +209,31 @@ def remove_peer_from_files(peer_id):
 
     return updated
 #end remove_peer_from_files()
+
+def cleanup_on_exit(my_peer_id):
+    """
+    Cleanly exit the peer by cleaning up it's metadata
+
+    Removes all files not stored locally.
+
+    Removes all peers_with_file entries except for itself on local files.
+    """
+    metadata = load_metadata()
+    clean_metadata = {}
+    local_files = get_local_file_entries(metadata)
+
+    for file_id, entry in metadata.items():
+        if file_id in local_files:
+            # keep that file, clean up peers_with_file
+            entry["peers_with_file"] = [my_peer_id]
+            clean_metadata[file_id] = entry
+            debug(f"Preserving {entry["file_name"]} (local file), resetting peers_with_file to this peer.")
+        else:
+            debug(f"Removing metadata for {entry["file_name"]} (remote file).")
+
+    save_metadata(clean_metadata)
+    debug("Cleaned metadata for this peer.")
+# end cleanup_on_exit()
 #-----------------------------#
 # end of Metadata Management  #
 #-----------------------------#
@@ -912,6 +937,7 @@ def command_line(my_peer_id):
 
             case "exit":
                 # exit program
+                cleanup_on_exit(my_peer_id)
                 print(f"Exiting program...")
                 break
 
@@ -931,6 +957,8 @@ def main():
     if not os.path.exists(FILE_UPLOAD_PATH):
         print(f"{FILE_UPLOAD_PATH} directory missing. Creating directory.")
         os.mkdir(FILE_UPLOAD_PATH)
+
+    cleanup_on_exit() # ensure our metadata is fresh to our local files
 
     # Load metadata
     load_metadata()
