@@ -52,7 +52,7 @@ GOSSIP_PEER_COUNT = 3 # how many peers do we attempt to gossip to
 tracked_peers = {} # key: peerId, value: dict with host, port, last_seen
 seen_gossip_ids = set() # uses a set to avoid repeats
 server_ready = threading.Event()
-METADATA_LOCK = threading.Lock()
+METADATA_LOCK = threading.RLock()
 #-------------------------#
 
 def debug(*args):
