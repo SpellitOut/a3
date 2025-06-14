@@ -18,12 +18,9 @@ Peer Statistics Page
 
 Commands
  - get <fileId> - Download a file to local files
-    --Should announce the local file to the other peers
     --support GET operation for local files
     --support GET operation for remote files
     --Keep new files in the local storage and announce them.
- - delete <fileId> - Delete a file (if you’re the owner)
-    --Should replicate the command to all peers with this file locally
 
 Other
  - Upon joining - Load a few (3-5) files by GET_FILE from different peers
@@ -272,7 +269,6 @@ def msg_send_delete(file_id, my_peer_id):
     Deletes a file locally from this peer if it owns it, and forwards the delete message to all tracked peers that have the file.
     """
     msg = msg_build_delete(my_peer_id, file_id)
-    peers = peers_with_file(file_id) # grab all the peers that have that file and attempt to send a message
 
     metadata = load_metadata()
     file_info = metadata.get(file_id)
@@ -287,12 +283,9 @@ def msg_send_delete(file_id, my_peer_id):
         metadata.pop(file_id)
         save_metadata(metadata)
 
-    if peers: # if any peers have the file, send them a message to delete
-        for peer_id in peers:
-            peer_info = tracked_peers.get(peer_id)
-            if not peer_info:
-                debug(f"Peer {peer_id} no longer in tracked peers; skipping delete message")
-                continue
+    # send a delete request to all tracked peers
+    for peer_id, peer_info in list(tracked_peers.items()):
+        if peer_info:
             send_message(msg, peer_info["host"], peer_info["port"])
 # end msg_send_delete
 
@@ -776,6 +769,15 @@ def receive_msg_file_data(msg, my_peer_id):
     update_metadata(file_id, file_metadata)
     add_peer_to_file(file_id, file_owner)
     add_peer_to_file(file_id, my_peer_id)
+
+    #reload and make sure we have up-to-date metadata before we announce to peers
+    metadata = load_metadata()
+    file_info = metadata.get(file_id)
+
+    # ANNOUNCE to all peers
+    for peer_id, peer_info in list(tracked_peers.items()):
+        msg_send_announce(my_peer_id, file_info, peer_info["host"], peer_info["port"], peer_id)
+
 # end receive_msg_file_data()
 
 def handle_message(msg, my_peer_id, my_host, my_port):
