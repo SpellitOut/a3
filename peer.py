@@ -284,9 +284,9 @@ def push_file(file_path, my_peer_id):
     update_metadata(file_id, file_metadata) # add/update metadata on a file
 
     if tracked_peers: # if we have a tracked peer, send to 1 of them
-        to_peer = random.choice(list(tracked_peers.items()))
-        to_host = to_peer[1]["host"]
-        to_port = to_peer[1]["port"]
+        to_peer, peer_info = random.choice(list(tracked_peers.items()))
+        to_host = peer_info["host"]
+        to_port = peer_info["port"]
         send_file(file_contents, file_metadata, to_host, to_port, to_peer)
 
     # ANNOUNCE to all peers
