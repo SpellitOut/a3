@@ -301,8 +301,6 @@ def msg_send_get(file_id, my_peer_id):
         print(f"File {file_id} is already present locally.")
         return
 
-    
-
     peers = peers_with_file(file_id) # get a list of peers who have the file
     if not peers:
         print(f"Cannot get file. No tracked peers have file {file_id}")
@@ -327,6 +325,7 @@ def msg_send_get(file_id, my_peer_id):
             client_socket.settimeout(30)
             client_socket.sendall(json.dumps(msg).encode())
             print(f"OPENED SOCKET TO {client_socket} at {to_host}:{to_port}")
+            print("Get sent. Waiting for response")
 
             # Wait to receive file data from them
             file_msg = receive_message(client_socket)
