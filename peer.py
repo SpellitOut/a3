@@ -109,10 +109,27 @@ def update_metadata(file_id, file_metadata):
     metadata = load_metadata()
     old = metadata.get(file_id)
 
-    if old is None or file_metadata["file_timestamp"] > old["file_timestamp"]:
+    if old is None:
+        # New file - initialize peers_with_file if missing
+        if "peers_with_file" not in file_metadata:
+            file_metadata["peers_with_file"] = []
         metadata[file_id] = file_metadata
         save_metadata(metadata)
+        return True
+
+    if file_metadata["file_timestamp"] > old["file_timestamp"]:
+        # keep dynamic lists like peers_with_file
+        preserve_fields = {}
+        preserve_fields["peers_with_file"] = old.get("peers_with_file", [])
+
+        # build an updated entry
+        updated = dict(file_metadata) # start with new data
+        updated.update(preserve_fields) # add the preserved fields
+
+        metadata[file_id] = updated
+        save_metadata(metadata)
         return True # updated or added successfully
+    
     return False # No update
 # end update_metadata()
 
@@ -238,7 +255,7 @@ def push_file(file_path, my_peer_id):
         "file_id": file_id,
         "file_owner": my_peer_id,
         "file_timestamp": timestamp,
-        "peers_with_file": my_peer_id
+        "peers_with_file": [my_peer_id]
     }
 
     # save the file locally
@@ -592,7 +609,7 @@ def receive_msg_announce(msg):
         print(f"Metadata updated for announced file: '{file_name}'")
 # end receive_msg_announce()
 
-def receive_msg_file_data(msg):
+def receive_msg_file_data(msg, my_peer_id):
     """
     Handles a FILE_DATA message by saving the file locally and updates metadata
     """
@@ -632,6 +649,8 @@ def receive_msg_file_data(msg):
 
     # update our metadata
     update_metadata(file_id, file_metadata)
+    add_peer_to_file(file_id, file_owner)
+    add_peer_to_file(file_id, my_peer_id)
 # end receive_msg_file_data()
 
 def handle_message(msg, my_peer_id, my_host, my_port):
@@ -651,7 +670,7 @@ def handle_message(msg, my_peer_id, my_host, my_port):
         receive_msg_announce(msg)
     elif type == "FILE_DATA":
         debug("Handling file_data")
-        receive_msg_file_data(msg)
+        receive_msg_file_data(msg, my_peer_id)
     else:
         print(f"Unhandled Message Type: {type}")
 # end handle_message()
