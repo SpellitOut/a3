@@ -151,8 +151,26 @@ def get_remote_file_entries(metadata, directory="FileUploads"):
     return remote_entries
 # end get_remote_file_entries()
 
-def add_peer_to_file(file_info, peer_id):
-    pass
+def add_peer_to_file(file_id, peer_id):
+    """
+    Adds a peer_id to the peers_with_file list for a file's metadata
+    """
+    metadata = load_metadata()
+
+    if file_id not in metadata:
+        return False # cannot add
+    
+    entry = metadata[file_id]
+
+    if "peers_with_file" not in entry:
+        entry["peers_with_file"] = []
+
+    if peer_id not in entry["peers_with_file"]:
+        entry["peers_with_file"].append(peer_id)
+        save_metadata(metadata)
+        return True #peer added to metadata
+    
+    return False # Peer already listed
 #end add_peer_to_file()
 
 def remove_peer_from_files(peer_id):
@@ -219,7 +237,8 @@ def push_file(file_path, my_peer_id):
         "file_size": len(file_contents),
         "file_id": file_id,
         "file_owner": my_peer_id,
-        "file_timestamp": timestamp
+        "file_timestamp": timestamp,
+        "peers_with_file": my_peer_id
     }
 
     # save the file locally
@@ -545,6 +564,7 @@ def receive_msg_gossip_reply(msg, my_peer_id, my_host, my_port):
     # update metadata of all the received files
     for file_metadata in the_local_files:
         file_id = file_metadata["file_id"]
+        add_peer_to_file(file_id, the_peer_id)
         updated_file = update_metadata(file_id, file_metadata)
         if updated_file:
             print(f"Updated metadata for file '{file_id}'")
@@ -566,6 +586,7 @@ def receive_msg_announce(msg):
     file_id = file_metadata["file_id"]
     print(f"Received file announcement from {peer_id}: {file_name} ({file_id})")
 
+    add_peer_to_file(file_id, peer_id)
     updated_file = update_metadata(file_id, file_metadata)
     if updated_file:
         print(f"Metadata updated for announced file: '{file_name}'")
@@ -727,8 +748,9 @@ def command_list(option="both"):
     for f in files:
         file_id = f["file_id"]
         file_name = f["file_name"]
+        peers_with_file = f["peers_with_file"]
         #TODO - track the peers that have the file
-        print(f"{file_id}: {file_name} - Peers: *TODO*")
+        print(f"{file_id}: {file_name} - Peers: {peers_with_file}")
 # end command_list()
 
 def command_peers():
