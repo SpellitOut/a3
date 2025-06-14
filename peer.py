@@ -289,6 +289,29 @@ def msg_send_delete(file_id, my_peer_id):
             send_message(msg, peer_info["host"], peer_info["port"])
 # end msg_send_delete
 
+def msg_send_get(file_id, my_peer_id):
+    """
+    Sends a get message to a peer who has the file we want.
+    """
+    file_path = os.path.join(FILE_UPLOAD_PATH, file_id)
+    if os.path.isfile(file_path):
+        print(f"File {file_id} is already present locally.")
+        return
+
+    msg = msg_build_get(my_peer_id, file_id)
+
+    peers = peers_with_file(file_id) # get a list of peers who have the file
+    if peers:
+        peer = random.choice(peers)
+        peer_info = tracked_peers.get(peer)
+        to_host = peer_info["host"]
+        to_port = peer_info["port"]
+        send_message(msg, to_host, to_port)
+    else:
+        print(f"Cannot get file. No tracked peers have file {file_id}")
+    pass
+# end msg_send_get()
+
 def push_file(file_path, my_peer_id):
     """
     Pushes a file locally to this peer, and forwards the file to up to 1 other peer.
@@ -520,6 +543,14 @@ def msg_build_delete(peer_id, file_id):
         "file_id": file_id
     }
 # end msg_build_delete()
+
+def msg_build_get(peer_id, file_id):
+    """Build a message for GET format"""
+    return {
+        "type": "GET",
+        "file_id": file_id,
+        "from": peer_id
+    }
 #--------------------------#
 # end of Message Building  #
 #--------------------------#
@@ -726,10 +757,49 @@ def receive_msg_delete(msg):
     save_metadata(metadata)
 # end receive_msg_delete()
 
+def receive_msg_get(msg):
+    """
+    Handles a GET message by checking if I still have the file that's been requested, then sending it
+    """
+    print(f"i received a get message!! {msg}")
+    file_id = msg["file_id"]
+    to_peer = msg["from"]
+
+    file_path = os.path.join(FILE_UPLOAD_PATH, file_id)
+
+    if not os.path.isfile(file_path):
+        # We don't have the file, so send a None type FILE_DATA
+        file_contents = b""
+        file_metadata = {
+            "file_name": None,
+            "file_size": None,
+            "file_id": None,
+            "file_owner": None,
+            "file_timestamp": None,
+            "peers_with_file": None
+        }
+        msg = msg_build_file_data(None, file_metadata)
+    else:
+        # We have the file, so send it
+        # load up the file
+        metadata = load_metadata()
+        file_metadata = metadata.get(file_id)
+        with open(file_path, "rb") as f:
+            file_contents = f.read()
+        msg = msg_build_file_data(file_contents, file_metadata)
+
+    # Send 
+    peer_info = tracked_peers.get(to_peer)
+    to_host = peer_info["host"]
+    to_port = peer_info["port"]  
+    send_file(file_contents, file_metadata, to_host, to_port, to_peer)
+# end receive_msg_get()
 
 def receive_msg_file_data(msg, my_peer_id):
     """
     Handles a FILE_DATA message by saving the file locally and updates metadata
+
+    Can receive from PUSHes or GETs
     """
     file_name = msg["file_name"]
     file_size = msg["file_size"]
@@ -737,6 +807,9 @@ def receive_msg_file_data(msg, my_peer_id):
     file_owner = msg["file_owner"]
     file_timestamp = msg["file_timestamp"]
     data_hex = msg["data"]
+
+    if file_id is None:
+        return # they sent a bad file
 
     # decode hex back into bytes
     try:
@@ -801,6 +874,9 @@ def handle_message(msg, my_peer_id, my_host, my_port):
     elif type == "DELETE":
         debug("Handling DELETE")
         receive_msg_delete(msg)
+    elif type == "GET":
+        debug("Handling GET")
+        receive_msg_get(msg)
     else:
         print(f"Unhandled Message Type: {type}")
 # end handle_message()
@@ -1007,8 +1083,7 @@ def command_line(my_peer_id):
             case "get":
                 # handle get
                 if arg:
-                    #TODO
-                    #get_file(arg, my_peer_id)
+                    msg_send_get(arg, my_peer_id)
                     debug(f"handling get for {arg}")
                 else:
                     print("Usage: get <fileId>")
