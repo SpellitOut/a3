@@ -215,10 +215,7 @@ def cleanup_on_exit(my_peer_id):
         local_files = get_local_file_entries(metadata)
         local_files_ids = {entry["file_id"] for entry in local_files}
 
-        debug(f"Local files: {local_files}")
-
         for file_id, entry in metadata.items():
-            debug(f"file_id: {file_id}")
             if file_id in local_files_ids:
                 # keep that file, clean up peers_with_file
                 entry["peers_with_file"] = [my_peer_id]
@@ -323,16 +320,15 @@ def msg_send_get(file_id, my_peer_id):
             client_socket.connect((to_host, to_port))
             client_socket.settimeout(30)
             client_socket.sendall(json.dumps(msg).encode())
-            print(f"OPENED SOCKET TO {client_socket} at {to_host}:{to_port}")
-            print("Get sent. Waiting for response")
+            print(f"Get request sent to peer {peer}. Awaiting response.")
 
             # Wait to receive file data from them
             file_msg = receive_message(client_socket)
-            print(f"received file message: {file_msg} from SOCKET: {client_socket}")
+            debug(f"received file message: {file_msg} from SOCKET: {client_socket}")
             if file_msg:
                 handle_message(file_msg, my_peer_id, to_host, to_port, client_socket)
             else:
-                print(f"No FILE_DATA received in response to GET for {file_id}")
+                print(f"No FILE_DATA received in response to GET for {file_id} from peer {peer}")
     except Exception as e:
         print(f"Error sending GET or receiving FILE_DATA: {e}")
 # end msg_send_get()
@@ -668,7 +664,7 @@ def receive_message(client_socket):
     decoder = json.JSONDecoder()
     while True:
         data = client_socket.recv(4096)
-        print(f"recv returned {len(data)} bytes: {data}")
+        debug(f"receive_message: recv returned {len(data)} bytes: {data}")
         if not data:
             break
         buffer += data
@@ -686,7 +682,6 @@ def receive_message(client_socket):
         except json.JSONDecodeError:
             raise ConnectionError("Connection closed before valid JSON was received.")
     else:
-        print("this is returning BAD")
         return None
 # end receive_message()
 
@@ -788,8 +783,6 @@ def receive_msg_get(msg, client_socket):
     Maintains a TCP connection
     """
     file_id = msg["file_id"]
-    
-    #to_peer = msg["from"]
 
     file_path = os.path.join(FILE_UPLOAD_PATH, file_id)
 
@@ -814,18 +807,9 @@ def receive_msg_get(msg, client_socket):
     
     response = msg_build_file_data(file_contents, file_metadata)
 
-    print(f"Received a GET message. Sending back: {response} to {client_socket}")
-
-
-
     client_socket.sendall(json.dumps(response).encode())
 
-    print(f"FILE_DATA sent on socket: {client_socket.getsockname()} -> {client_socket.getpeername()}")
-    # Send 
-    # peer_info = tracked_peers.get(to_peer)
-    # to_host = peer_info["host"]
-    # to_port = peer_info["port"]  
-    # send_file(file_contents, file_metadata, to_host, to_port, to_peer)
+    debug(f"FILE_DATA sent on socket: {client_socket.getsockname()} -> {client_socket.getpeername()}")
 # end receive_msg_get()
 
 def receive_msg_file_data(msg, my_peer_id):
@@ -1010,7 +994,6 @@ def command_list(option="both"):
         file_id = f["file_id"]
         file_name = f["file_name"]
         peers_with_file = f["peers_with_file"]
-        #TODO - track the peers that have the file
         print(f"{file_id}: {file_name} - Peers: {peers_with_file}")
 # end command_list()
 
