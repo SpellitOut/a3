@@ -670,25 +670,25 @@ def receive_message(client_socket):
     decoder = json.JSONDecoder()
     while True:
         data = client_socket.recv(4096)
+        print(f"recv returned {len(data)} bytes: {data}")
         if not data:
-            if not buffer:
-                # no data and an empty buffer means connection is closed
-                return None
-            else:
-                # connection closed, but buffer still has data
-                break
+            break
         buffer += data
-        
-        # Attempt to decode JSON from a buffer
+        try:
+            msg, index = decoder.raw_decode(buffer.decode())
+            return msg
+        except json.JSONDecodeError:
+            continue  # need more data
+
+    if buffer:
+        # final attempt to parse
         try:
             msg, _ = decoder.raw_decode(buffer.decode())
             return msg
         except json.JSONDecodeError:
-            # keep reading
-            continue
-
-    # if connection has closed, but JSON is still invalid, throw an error
-    raise ConnectionError("Invalid JSON received before connection was closed.")
+            raise ConnectionError("Connection closed before valid JSON was received.")
+    else:
+        return None
 # end receive_message()
 
 def receive_msg_gossip(msg, my_peer_id, my_host, my_port):
