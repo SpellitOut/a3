@@ -191,7 +191,23 @@ def add_peer_to_file(file_id, peer_id):
 #end add_peer_to_file()
 
 def remove_peer_from_files(peer_id):
-    pass
+    """
+    Removes the given peer_id from peers_with_file list in all file entries in metadata.
+    Saves metadata if any changes are made.
+    """
+    metadata = load_metadata()
+    updated = False
+
+    for file_id, entry in metadata.items():
+        peers = entry.get("peers_with_file")
+        if isinstance(peers, list) and peer_id in peers:
+            peers.remove(peer_id)
+            updated = True
+
+    if updated:
+        save_metadata(metadata)
+
+    return updated
 #end remove_peer_from_files()
 #-----------------------------#
 # end of Metadata Management  #
@@ -492,6 +508,7 @@ def remove_peer(host, port):
         if peer_info["host"] == host and peer_info["port"] == port:
             print(f"Removing unreachable peer {peer_id} at {host}:{port}")
             del tracked_peers[peer_id]
+            remove_peer_from_files(peer_id)
             break
 # end remove_peer()
 
@@ -504,6 +521,7 @@ def remove_old_peers(timeout=PEER_TIMEOUT):
         if now - tracked_peers[peer_id]["last_seen"] > timeout:
             debug(f"Removing old peer {peer_id}")
             del tracked_peers[peer_id]
+            remove_peer_from_files(peer_id)
 # end remove_old_peers()
 #-----------------------#
 # end of Peer Tracking  #
