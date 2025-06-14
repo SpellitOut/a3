@@ -52,6 +52,7 @@ GOSSIP_PEER_COUNT = 3 # how many peers do we attempt to gossip to
 tracked_peers = {} # key: peerId, value: dict with host, port, last_seen
 seen_gossip_ids = set() # uses a set to avoid repeats
 server_ready = threading.Event()
+METADATA_LOCK = threading.Lock()
 #-------------------------#
 
 def debug(*args):
@@ -73,15 +74,16 @@ def load_metadata():
     Attempts to load metadata from METADATA_FILE into a dictionary and return the metadata as a dictionary
     If a metadata file does not exist, it creates it and returns an empty dictionary
     """
-    try:
-        with open(METADATA_FILE, "r") as f:
-            metadata = json.load(f)
-    except FileNotFoundError:
-        debug(f"Metadata file does not exist. Creating file '{METADATA_FILE}'")
-        metadata = {}
-        with open(METADATA_FILE, "w") as f:
-            json.dump(metadata, f, indent=2)
-    return metadata
+    with METADATA_LOCK:
+        try:
+            with open(METADATA_FILE, "r") as f:
+                metadata = json.load(f)
+        except FileNotFoundError:
+            debug(f"Metadata file does not exist. Creating file '{METADATA_FILE}'")
+            metadata = {}
+            with open(METADATA_FILE, "w") as f:
+                json.dump(metadata, f, indent=2)
+        return metadata
 #end load_metadata()
 
 def update_metadata(file_id, file_metadata):
@@ -89,88 +91,93 @@ def update_metadata(file_id, file_metadata):
     Add or update a file entry in the metadata.
     Only updates if the file is new or has a newer timestamp
     """
-    metadata = load_metadata()
-    old = metadata.get(file_id)
+    with METADATA_LOCK:
+        metadata = load_metadata()
+        old = metadata.get(file_id)
 
-    if old is None:
-        # New file - initialize peers_with_file if missing
-        if "peers_with_file" not in file_metadata:
-            file_metadata["peers_with_file"] = []
-        metadata[file_id] = file_metadata
-        save_metadata(metadata)
-        return True
+        if old is None:
+            # New file - initialize peers_with_file if missing
+            if "peers_with_file" not in file_metadata:
+                file_metadata["peers_with_file"] = []
+            metadata[file_id] = file_metadata
+            save_metadata(metadata)
+            return True
 
-    if file_metadata["file_timestamp"] > old["file_timestamp"]:
-        # keep dynamic lists like peers_with_file
-        preserve_fields = {}
-        preserve_fields["peers_with_file"] = old.get("peers_with_file", [])
+        if file_metadata["file_timestamp"] > old["file_timestamp"]:
+            # keep dynamic lists like peers_with_file
+            preserve_fields = {}
+            preserve_fields["peers_with_file"] = old.get("peers_with_file", [])
 
-        # build an updated entry
-        updated = dict(file_metadata) # start with new data
-        updated.update(preserve_fields) # add the preserved fields
+            # build an updated entry
+            updated = dict(file_metadata) # start with new data
+            updated.update(preserve_fields) # add the preserved fields
 
-        metadata[file_id] = updated
-        save_metadata(metadata)
-        return True # updated or added successfully
-    
-    return False # No update
+            metadata[file_id] = updated
+            save_metadata(metadata)
+            return True # updated or added successfully
+        
+        return False # No update
 # end update_metadata()
 
 def save_metadata(data):
     """
     Saves the metadata to the file
     """
-    try:
-        with open(METADATA_FILE, "w") as f:
-            json.dump(data, f, indent=2)
-    except IOError as e:
-        debug(f"Failed to write metadata to {METADATA_FILE}: {e}")
+    with METADATA_LOCK:
+        try:
+            with open(METADATA_FILE, "w") as f:
+                json.dump(data, f, indent=2)
+        except IOError as e:
+            debug(f"Failed to write metadata to {METADATA_FILE}: {e}")
 #end save_metadata()
 
 def get_local_file_entries(metadata, directory="FileUploads"):
     """Return list of file metadata for files present in the directory"""
-    local_files = set(os.listdir(directory))
-    local_entries = []
+    with METADATA_LOCK:
+        local_files = set(os.listdir(directory))
+        local_entries = []
 
-    for file_id, entry in metadata.items():
-        if file_id in local_files:
-            local_entries.append(entry)
+        for file_id, entry in metadata.items():
+            if file_id in local_files:
+                local_entries.append(entry)
 
-    return local_entries
+        return local_entries
 # end get_local_file_entries()
 
 def get_remote_file_entries(metadata, directory="FileUploads"):
     """Return list of file metadata for files NOT present in the directory"""
-    local_files = set(os.listdir(directory))
-    remote_entries = []
+    with METADATA_LOCK:
+        local_files = set(os.listdir(directory))
+        remote_entries = []
 
-    for file_id, entry in metadata.items():
-        if file_id not in local_files:
-            remote_entries.append(entry)
+        for file_id, entry in metadata.items():
+            if file_id not in local_files:
+                remote_entries.append(entry)
 
-    return remote_entries
+        return remote_entries
 # end get_remote_file_entries()
 
 def add_peer_to_file(file_id, peer_id):
     """
     Adds a peer_id to the peers_with_file list for a file's metadata
     """
-    metadata = load_metadata()
+    with METADATA_LOCK:
+        metadata = load_metadata()
 
-    if file_id not in metadata:
-        return False # cannot add
-    
-    entry = metadata[file_id]
+        if file_id not in metadata:
+            return False # cannot add
+        
+        entry = metadata[file_id]
 
-    if "peers_with_file" not in entry:
-        entry["peers_with_file"] = []
+        if "peers_with_file" not in entry:
+            entry["peers_with_file"] = []
 
-    if peer_id not in entry["peers_with_file"]:
-        entry["peers_with_file"].append(peer_id)
-        save_metadata(metadata)
-        return True #peer added to metadata
-    
-    return False # Peer already listed
+        if peer_id not in entry["peers_with_file"]:
+            entry["peers_with_file"].append(peer_id)
+            save_metadata(metadata)
+            return True #peer added to metadata
+        
+        return False # Peer already listed
 #end add_peer_to_file()
 
 def remove_peer_from_files(peer_id):
@@ -178,19 +185,20 @@ def remove_peer_from_files(peer_id):
     Removes the given peer_id from peers_with_file list in all file entries in metadata.
     Saves metadata if any changes are made.
     """
-    metadata = load_metadata()
-    updated = False
+    with METADATA_LOCK:
+        metadata = load_metadata()
+        updated = False
 
-    for file_id, entry in metadata.items():
-        peers = entry.get("peers_with_file")
-        if isinstance(peers, list) and peer_id in peers:
-            peers.remove(peer_id)
-            updated = True
+        for file_id, entry in metadata.items():
+            peers = entry.get("peers_with_file")
+            if isinstance(peers, list) and peer_id in peers:
+                peers.remove(peer_id)
+                updated = True
 
-    if updated:
-        save_metadata(metadata)
+        if updated:
+            save_metadata(metadata)
 
-    return updated
+        return updated
 #end remove_peer_from_files()
 
 def cleanup_on_exit(my_peer_id):
@@ -201,25 +209,26 @@ def cleanup_on_exit(my_peer_id):
 
     Removes all peers_with_file entries except for itself on local files.
     """
-    metadata = load_metadata()
-    clean_metadata = {}
-    local_files = get_local_file_entries(metadata)
-    local_files_ids = {entry["file_id"] for entry in local_files}
+    with METADATA_LOCK:
+        metadata = load_metadata()
+        clean_metadata = {}
+        local_files = get_local_file_entries(metadata)
+        local_files_ids = {entry["file_id"] for entry in local_files}
 
-    debug(f"Local files: {local_files}")
+        debug(f"Local files: {local_files}")
 
-    for file_id, entry in metadata.items():
-        debug(f"file_id: {file_id}")
-        if file_id in local_files_ids:
-            # keep that file, clean up peers_with_file
-            entry["peers_with_file"] = [my_peer_id]
-            clean_metadata[file_id] = entry
-            debug(f"Preserving {entry['file_name']} (local file), resetting peers_with_file to this peer.")
-        else:
-            debug(f"Removing metadata for {entry['file_name']} (remote file).")
+        for file_id, entry in metadata.items():
+            debug(f"file_id: {file_id}")
+            if file_id in local_files_ids:
+                # keep that file, clean up peers_with_file
+                entry["peers_with_file"] = [my_peer_id]
+                clean_metadata[file_id] = entry
+                debug(f"Preserving {entry['file_name']} (local file), resetting peers_with_file to this peer.")
+            else:
+                debug(f"Removing metadata for {entry['file_name']} (remote file).")
 
-    save_metadata(clean_metadata)
-    debug("Cleaned metadata for this peer.")
+        save_metadata(clean_metadata)
+        debug("Cleaned metadata for this peer.")
 # end cleanup_on_exit()
 #-----------------------------#
 # end of Metadata Management  #
