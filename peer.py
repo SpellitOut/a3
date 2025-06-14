@@ -267,6 +267,35 @@ def send_message(msg, to_host, to_port):
         return False
 # end send_message()
 
+def msg_send_delete(file_id, my_peer_id):
+    """
+    Deletes a file locally from this peer if it owns it, and forwards the delete message to all tracked peers that have the file.
+    """
+    msg = msg_build_delete(my_peer_id, file_id)
+    peers = peers_with_file(file_id) # grab all the peers that have that file and attempt to send a message
+
+    metadata = load_metadata()
+    file_info = metadata.get(file_id)
+    file_owner = file_info.get("file_owner")
+
+    if my_peer_id == file_owner: # if we own the file, can attempt to delete locally
+        file_path = os.path.join(FILE_UPLOAD_PATH, file_id)
+        if os.path.isfile(file_path): # if we have it
+            os.remove(file_path) # delete it
+            print(f"Deleted local file {file_id} on request from owner {my_peer_id}")
+        
+        metadata.pop(file_id)
+        save_metadata(metadata)
+
+    if peers: # if any peers have the file, send them a message to delete
+        for peer_id in peers:
+            peer_info = tracked_peers.get(peer_id)
+            if not peer_info:
+                debug(f"Peer {peer_id} no longer in tracked peers; skipping delete message")
+                continue
+            send_message(msg, peer_info["host"], peer_info["port"])
+# end msg_send_delete
+
 def push_file(file_path, my_peer_id):
     """
     Pushes a file locally to this peer, and forwards the file to up to 1 other peer.
@@ -489,6 +518,15 @@ def msg_build_file_data(content, file_metadata):
         "data": content.hex()
     }
 # end msg_build_file_data()
+
+def msg_build_delete(peer_id, file_id):
+    """Build a message for DELETE format"""
+    return {
+        "type": "DELETE",
+        "from": peer_id,
+        "file_id": file_id
+    }
+# end msg_build_delete()
 #--------------------------#
 # end of Message Building  #
 #--------------------------#
@@ -544,6 +582,24 @@ def remove_old_peers(timeout=PEER_TIMEOUT):
             del tracked_peers[peer_id]
             remove_peer_from_files(peer_id)
 # end remove_old_peers()
+
+def peers_with_file(file_id):
+    """
+    Returns a list of tracked peers that have file_id
+    """
+    metadata = load_metadata()
+    file_info = metadata.get(file_id)
+    if not file_info or "peers_with_file" not in file_info:
+        return []
+    
+    # make sure to only return peers that we are still tracking
+    peers = [
+        peer_id for peer_id in file_info["peers_with_file"]
+        if peer_id in tracked_peers
+    ]
+
+    return peers
+# end peers_with_file()
 #-----------------------#
 # end of Peer Tracking  #
 #-----------------------#
@@ -648,6 +704,36 @@ def receive_msg_announce(msg):
         print(f"Metadata updated for announced file: '{file_name}'")
 # end receive_msg_announce()
 
+def receive_msg_delete(msg):
+    """
+    Handles a DELETE message by deleting the file locally if the sender owns the file.
+    """
+    from_peer = msg["from"]
+    file_id = msg["file_id"]
+
+    metadata = load_metadata()
+    file_info = metadata.get(file_id)
+
+    if not file_info:
+        return # nothing to delete
+    
+    # only delete if the owner sent the message
+    if from_peer not in file_info.get("file_owner"):
+        print(f"Rejecting delete for {file_id}: Not from owner")
+        return
+    
+    # Remove file if this peer has it
+    file_path = os.path.join(FILE_UPLOAD_PATH, file_id)
+    if os.path.isfile(file_path):
+        os.remove(file_path)
+        print(f"Deleted local file {file_id} on request from owner {from_peer}")
+
+    # update metadata
+    metadata.pop(file_id)
+    save_metadata(metadata)
+# end receive_msg_delete()
+
+
 def receive_msg_file_data(msg, my_peer_id):
     """
     Handles a FILE_DATA message by saving the file locally and updates metadata
@@ -710,6 +796,9 @@ def handle_message(msg, my_peer_id, my_host, my_port):
     elif type == "FILE_DATA":
         debug("Handling file_data")
         receive_msg_file_data(msg, my_peer_id)
+    elif type == "DELETE":
+        debug("Handling DELETE")
+        receive_msg_delete(msg)
     else:
         print(f"Unhandled Message Type: {type}")
 # end handle_message()
@@ -925,8 +1014,7 @@ def command_line(my_peer_id):
             case "delete":
                 # handle delete
                 if arg:
-                    #TODO
-                    #delete_file(arg)
+                    msg_send_delete(arg, my_peer_id)
                     debug(f"handling delete for {arg}")
                 else:
                     print("Usage: delete <fileId>")
