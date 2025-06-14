@@ -16,12 +16,6 @@ Peer Statistics Page
  - Tracked Peers (PeerName,Host,Port)
  - File Metadata information (Id, Name, Owner, Size,Timestamp, hasCopy, peers_with_file)
 
-Commands
- - get <fileId> - Download a file to local files
-    --support GET operation for local files
-    --support GET operation for remote files
-    --Keep new files in the local storage and announce them.
-
 Other
  - Upon joining - Load a few (3-5) files by GET_FILE from different peers
  - "Size in MB" according to metadata and peer statistic page. 
@@ -220,7 +214,7 @@ def cleanup_on_exit(my_peer_id):
             # keep that file, clean up peers_with_file
             entry["peers_with_file"] = [my_peer_id]
             clean_metadata[file_id] = entry
-            debug(f"Preserving {entry["file_name"]} (local file), resetting peers_with_file to this peer.")
+            debug(f"Preserving {entry['file_name']} (local file), resetting peers_with_file to this peer.")
         else:
             debug(f"Removing metadata for {entry["file_name"]} (remote file).")
 
