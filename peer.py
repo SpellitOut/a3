@@ -15,13 +15,6 @@ TODO -
 Peer Statistics Page
  - Tracked Peers (PeerName,Host,Port)
  - File Metadata information (Id, Name, Owner, Size,Timestamp, hasCopy, peers_with_file)
-
-Other
- - Upon joining - Load a few (3-5) files by GET_FILE from different peers
- - "Size in MB" according to metadata and peer statistic page. 
-    Maybe too hard to implement since many of my test files are SMALL and does not make sense to store file_size in MB. Best to just format in MB and display 
-    e.g file_size/1024 = KB
-        file_size/1024/1024 = MB
 """
 
 #---# WELL KNOWN HOST INFORMATION #---#
@@ -339,7 +332,6 @@ def load_files_on_join(my_peer_id):
     Attempt to get a number of files (that we don't have) on join by sending GET requests to peers
     """
     local_files = set(os.listdir(FILE_UPLOAD_PATH))
-    print(f"Files stored locally: {local_files}")
 
     timeout = 10  # seconds to wait max
     waited = 0
@@ -393,7 +385,7 @@ def push_file(file_path, my_peer_id):
 
     file_metadata = {
         "file_name": os.path.basename(file_path),
-        "file_size": len(file_contents),
+        "file_size": round(len(file_contents) / (1024 * 1024), 2), # saved as MB
         "file_id": file_id,
         "file_owner": my_peer_id,
         "file_timestamp": timestamp,
