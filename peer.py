@@ -1,3 +1,24 @@
+"""
+Name:           Ian Spellman
+Student number: 7891649
+Course:         A01 - COMP3010
+Instructor:     Dr. Saulo dos Santos
+
+Assignment 3
+
+peer.py
+
+    Creates a Filesharing peer that stores files, metadata and statistic about the peer.
+
+    Allows peers to connect to other peers in a Peer-to-Peer (P2P) network.
+
+    peer.py maintains file metadata and files uploaded by the invidivual peer (this)
+
+    peer.py runs a command-line terminal to allow you to run commands and interact with other peers
+
+    See the README.md for further functionality
+"""
+
 import os
 import sys
 import json
@@ -8,14 +29,6 @@ import socket
 import hashlib
 import datetime
 import threading
-
-"""
-TODO - 
-
-Peer Statistics Page
- - Tracked Peers (PeerName,Host,Port)
- - File Metadata information (Id, Name, Owner, Size,Timestamp, hasCopy, peers_with_file)
-"""
 
 #---# WELL KNOWN HOST INFORMATION #---#
 # You may adjust these values to      #
