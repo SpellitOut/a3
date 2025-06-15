@@ -993,6 +993,154 @@ def p2p_server(peer_id, host, port, http_port):
 
 
 
+#------------------------------#
+#---# Webserver Management #---#
+#                              #
+# code related to managing     #
+# the webserver                #
+#------------------------------#
+def webserver(host, http_port, my_peer_id):
+    """
+    Starts a webserver at host and http_port
+    """
+    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_socket.bind((host, http_port))
+    server_socket.listen()
+    print(f"Web server running at http://{host}:{http_port}")
+
+    while True:
+        conn, addr = server_socket.accept()
+        threading.Thread(target=handle_http_client, args=(conn, my_peer_id,), daemon=True).start()
+# end webserver()
+
+def handle_http_client(client_socket, my_peer_id):
+    """
+    Parses HTTP requests then serves files to the client socket
+    """
+    try:
+        request = client_socket.recv(1024).decode()
+        if not request:
+            client_socket.close()
+            return
+        
+        # Parse request
+        lines = request.splitlines()
+        if len(lines) == 0:
+            client_socket.close()
+            return
+        
+        request_line = lines[0]
+        tokens = request_line.split()
+        if len(tokens) < 2:
+            client_socket.close()
+            return
+        
+        method, path = tokens[0], tokens[1]
+        if method != 'GET':
+            client_socket.close()
+            return
+        
+        if path == '/' or path == 'index.html':
+            serve_file(client_socket, 'index.html', 'text/html')
+        elif path == '/stats.js':
+            serve_file(client_socket, 'stats.js', 'application/javascript')
+        elif path == '/style.css':
+            serve_file(client_socket, 'style.css', 'text/css')
+        elif path == '/stats.json':
+            serve_stats(client_socket, my_peer_id)
+        else:
+            send_404(client_socket)
+    except Exception as e:
+        print(f"HTTP error: {e}")
+    finally:
+        client_socket.close()
+# end handle_http_client()
+
+def serve_file(client_socket, file_name, content_type):
+    """
+    Serves a file_name to the client_socket
+    """
+    try:
+        with open(file_name, 'rb') as f:
+            content = f.read()
+        header = (
+            f"HTTP/1.1 200 OK\r\n"
+            f"Content-Type: {content_type}\r\n"
+            f"Content-Length: {len(content)}\r\n"
+            f"Connection: close\r\n"
+            f"\r\n"
+        )
+        client_socket.sendall(header.encode() + content)
+    except FileNotFoundError:
+        send_404(client_socket)
+# end serve_file
+
+def serve_stats(client_socket, my_peer_id):
+    """
+    Serves the peer and file statistics as a formatted json to the client_socket
+    """
+    metadata = load_metadata()
+
+    # Format peers list from tracked_peers
+    peers = []
+    for peer_id, peer_info in tracked_peers.items():
+        peers.append({
+            "peerId": peer_id,
+            "host": peer_info.get("host", ""),
+            "port": peer_info.get("port", ""),
+            "last_seen": peer_info.get("last_seen", 0)
+        })
+
+    # Format files from metadata
+    files = []
+    for file_id, file_info in metadata.items():
+        files.append({
+            "file_name": file_info.get("file_name", ""),
+            "file_size": file_info.get("file_size", 0),
+            "file_id": file_id,
+            "file_owner": file_info.get("file_owner", ""),
+            "file_timestamp": file_info.get("file_timestamp", 0),
+            "has_copy": my_peer_id in file_info.get("peers_with_file"),
+            "peers_with_file": file_info.get("peers_with_file", []),
+        })
+
+    stats_data = {
+        "peerId": my_peer_id,
+        "peers": peers,
+        "files": files,
+    }
+
+    body = json.dumps(stats_data).encode()
+    header = (
+        f"HTTP/1.1 200 OK\r\n"
+        f"Content-Type: application/json\r\n"
+        f"Content-Length: {len(body)}\r\n"
+        f"Connection: close\r\n"
+        f"\r\n"
+    )
+    client_socket.sendall(header.encode() + body)
+# end serve_stats
+
+def send_404(client_socket):
+    """
+    Sends a 404 error to the client socket
+    """
+    body = b"404 Not Found"
+    header = (
+        f"HTTP/1.1 404 Not Found\r\n"
+        f"Content-Type: text/plain\r\n"
+        f"Content-Length: {len(body)}\r\n"
+        f"Connection: close\r\n"
+        f"\r\n"
+    )
+    client_socket.sendall(header.encode() + body)
+# end send_404
+#------------------------------#
+# end of Webserver Management  #
+#------------------------------#
+
+
+
 #---------------------------------#
 #---# Command Line Management #---#
 #                                 #
@@ -1195,6 +1343,9 @@ def main():
 
     gossip_thread = threading.Thread(target=interval_send_gossip, args=(host, p2p_port, peer_id), daemon=True)
     gossip_thread.start()
+
+    webserver_thread = threading.Thread(target=webserver, args=(host, http_port, peer_id,), daemon=True)
+    webserver_thread.start()
 
     try:
         command_line(peer_id)

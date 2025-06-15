@@ -1,0 +1,43 @@
+<html>
+<head>
+    <title>Peer Stats</title>
+    <script src="stats.js"></script>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat&display=swap" rel="stylesheet">
+</head>
+<body>
+
+    <div id="banner"><h1>Peer Stats</h1></div>
+
+    <div><strong>Peer ID:</strong> <span id="peer-id"></span></div>
+
+    <h2>Tracked Peers</h2>
+    <table border="1">
+        <thead>
+            <tr>
+                <th>Peer ID</th>
+                <th>Host</th>
+                <th>Port</th>
+                <th>Last Seen</th>
+            </tr>
+        </thead>
+        <tbody id="peers"></tbody>
+    </table>
+
+    <h2>Files</h2>
+    <table border="1">
+        <thead>
+            <tr>
+                <th>File ID</th>
+                <th>Name</th>
+                <th>Owner</th>
+                <th>Size (MB)</th>
+                <th>Timestamp</th>
+                <th>Has Copy</th>
+                <th>Peers with File</th>
+            </tr>
+        </thead>
+        <tbody id="files"></tbody>
+    </table>
+</body>
+</html>
