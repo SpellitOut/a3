@@ -46,6 +46,7 @@ PEER_TIMEOUT = 60 #seconds # How long must a peer be inactive for before it is u
 PEER_CLEANUP_INTERVAL = 10 #seconds # How long between checking for inactive peers
 GOSSIP_INTERVAL = 30 #seconds -- How often peer gossips
 GOSSIP_PEER_COUNT = 3 # how many peers do we attempt to gossip to
+NUM_FILES_ON_JOIN = 3 # how many files do we attempt to get on join
 #---------------------------#
 
 #---# Program Globals #---#
@@ -332,6 +333,44 @@ def msg_send_get(file_id, my_peer_id):
     except Exception as e:
         print(f"Error sending GET or receiving FILE_DATA: {e}")
 # end msg_send_get()
+
+def load_files_on_join(my_peer_id):
+    """
+    Attempt to get a number of files (that we don't have) on join by sending GET requests to peers
+    """
+    local_files = set(os.listdir(FILE_UPLOAD_PATH))
+    print(f"Files stored locally: {local_files}")
+
+    timeout = 10  # seconds to wait max
+    waited = 0
+    missing_files = []
+
+    # checks if we have any missing files, waits some time to make sure we get some gossip info back first
+    while waited < timeout:
+        with METADATA_LOCK:
+            metadata = load_metadata()
+            missing_files = [
+                (file_id, entry) for file_id, entry in metadata.items()
+                if file_id not in local_files and entry["peers_with_file"]
+            ]
+
+        if missing_files:
+            break
+
+        time.sleep(1)
+        waited += 1
+        debug(f"Waiting for gossip replies... Waited {waited} second(s)")
+
+    if not missing_files:
+        print("No missing files discovered after gossip replies.")
+        return
+
+    files_to_get = random.sample(missing_files, min(NUM_FILES_ON_JOIN, len(missing_files)))
+
+    for file_id, entry in files_to_get:
+        print(f"Requesting file {file_id} ({entry['file_name']}) from peers...")
+        msg_send_get(file_id, my_peer_id)
+# end load_files_on_join()
 
 def push_file(file_path, my_peer_id):
     """
@@ -1155,6 +1194,9 @@ def main():
     except KeyboardInterrupt:
         print("Exiting program...")
         sys.exit(0)
+
+    # attempt to load 3-5 files from other peers, after our first gossip
+    load_files_on_join(peer_id)
 
     peer_cleanup_thread = threading.Thread(target=peer_cleanup, daemon=True)
     peer_cleanup_thread.start()
